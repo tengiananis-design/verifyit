@@ -1,64 +1,86 @@
 import express from "express";
 import crypto from "crypto";
-import Database from "better-sqlite3";
+import pg from "pg";
 import QRCode from "qrcode";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import path from "path";
 import { fileURLToPath } from "url";
 
+const { Pool } = pg;
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME_IN_PRODUCTION";
+const JWT_SECRET =
+  process.env.JWT_SECRET || "CHANGE_ME_IN_PRODUCTION";
 
-const db = new Database(
-  process.env.DB_PATH || path.join(__dirname, "verifyit.db")
-);
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL is not configured.");
+  process.exit(1);
+}
 
-db.pragma("journal_mode = WAL");
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS businesses (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
+/* -----------------------------
+   DATABASE SETUP
+----------------------------- */
 
-CREATE TABLE IF NOT EXISTS products (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  business_id INTEGER NOT NULL,
-  brand TEXT NOT NULL,
-  product_name TEXT NOT NULL,
-  batch TEXT DEFAULT '',
-  code TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL DEFAULT 'active',
-  verification_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (business_id) REFERENCES businesses(id)
-);
+async function initDatabase() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS businesses (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
 
-CREATE TABLE IF NOT EXISTS verifications (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  product_id INTEGER,
-  code TEXT NOT NULL,
-  result TEXT NOT NULL,
-  checked_at TEXT NOT NULL,
-  FOREIGN KEY (product_id) REFERENCES products(id)
-);
-`);
+    CREATE TABLE IF NOT EXISTS products (
+      id SERIAL PRIMARY KEY,
+      business_id INTEGER NOT NULL,
+      brand TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      batch TEXT DEFAULT '',
+      code TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'active',
+      verification_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (business_id)
+        REFERENCES businesses(id)
+        ON DELETE CASCADE
+    );
 
-app.use(express.json({ limit: "50kb" }));
-app.use(express.static(path.join(__dirname, "public")));
+    CREATE TABLE IF NOT EXISTS verifications (
+      id SERIAL PRIMARY KEY,
+      product_id INTEGER,
+      code TEXT NOT NULL,
+      result TEXT NOT NULL,
+      checked_at TEXT NOT NULL,
+      FOREIGN KEY (product_id)
+        REFERENCES products(id)
+        ON DELETE SET NULL
+    );
+  `);
+
+  console.log("VerifyIt PostgreSQL database ready.");
+}
 
 function now() {
   return new Date().toISOString();
 }
 
-function makeCode() {
+/* -----------------------------
+   HELPERS
+----------------------------- */
+
+async function makeCode() {
   let code;
 
   do {
@@ -69,7 +91,12 @@ function makeCode() {
       .match(/.{1,4}/g)
       .join("-");
   } while (
-    db.prepare("SELECT 1 FROM products WHERE code = ?").get(code)
+    (
+      await pool.query(
+        "SELECT 1 FROM products WHERE code = $1",
+        [code]
+      )
+    ).rowCount
   );
 
   return code;
@@ -116,21 +143,44 @@ function publicProduct(product) {
     batch: product.batch,
     code: product.code,
     status: product.status,
-    verificationCount: product.verification_count,
+    verificationCount:
+      Number(product.verification_count),
     createdAt: product.created_at
   };
 }
 
 /* -----------------------------
+   EXPRESS
+----------------------------- */
+
+app.use(express.json({ limit: "50kb" }));
+
+app.use(
+  express.static(
+    path.join(__dirname, "public")
+  )
+);
+
+/* -----------------------------
    HEALTH CHECK
 ----------------------------- */
 
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    service: "VerifyIt",
-    version: "1.2.0"
-  });
+app.get("/api/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+
+    res.json({
+      ok: true,
+      service: "VerifyIt",
+      version: "1.3.0",
+      database: "postgresql"
+    });
+  } catch {
+    res.status(500).json({
+      ok: false,
+      error: "Database connection failed."
+    });
+  }
 });
 
 /* -----------------------------
@@ -159,32 +209,39 @@ app.post("/api/register", async (req, res) => {
   try {
     const hash = await bcrypt.hash(password, 12);
 
-    const info = db
-      .prepare(`
-        INSERT INTO businesses
-        (name, email, password_hash, created_at)
-        VALUES (?, ?, ?, ?)
-      `)
-      .run(
+    const result = await pool.query(
+      `
+      INSERT INTO businesses
+      (name, email, password_hash, created_at)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, name, email
+      `,
+      [
         String(name).trim(),
         String(email).trim().toLowerCase(),
         hash,
         now()
-      );
+      ]
+    );
 
-    const business = db
-      .prepare(
-        "SELECT id, name, email FROM businesses WHERE id = ?"
-      )
-      .get(info.lastInsertRowid);
+    const business = result.rows[0];
 
     res.status(201).json({
       token: tokenFor(business),
       business
     });
-  } catch {
-    res.status(409).json({
-      error: "That email is already registered."
+  } catch (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({
+        error:
+          "That email is already registered."
+      });
+    }
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "Unable to create account."
     });
   }
 });
@@ -199,125 +256,223 @@ app.post("/api/login", async (req, res) => {
     password
   } = req.body || {};
 
-  const business = db
-    .prepare(
-      "SELECT * FROM businesses WHERE email = ?"
-    )
-    .get(
-      String(email || "")
-        .trim()
-        .toLowerCase()
+  try {
+    const result = await pool.query(
+      `
+      SELECT *
+      FROM businesses
+      WHERE email = $1
+      `,
+      [
+        String(email || "")
+          .trim()
+          .toLowerCase()
+      ]
     );
 
-  if (
-    !business ||
-    !(await bcrypt.compare(
-      String(password || ""),
-      business.password_hash
-    ))
-  ) {
-    return res.status(401).json({
-      error: "Invalid email or password."
+    const business = result.rows[0];
+
+    if (
+      !business ||
+      !(await bcrypt.compare(
+        String(password || ""),
+        business.password_hash
+      ))
+    ) {
+      return res.status(401).json({
+        error: "Invalid email or password."
+      });
+    }
+
+    res.json({
+      token: tokenFor(business),
+      business: {
+        id: business.id,
+        name: business.name,
+        email: business.email
+      }
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Unable to log in."
     });
   }
-
-  res.json({
-    token: tokenFor(business),
-    business: {
-      id: business.id,
-      name: business.name,
-      email: business.email
-    }
-  });
 });
 
 /* -----------------------------
    CURRENT BUSINESS
 ----------------------------- */
 
-app.get("/api/me", auth, (req, res) => {
-  const business = db
-    .prepare(`
+app.get("/api/me", auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
       SELECT id, name, email, created_at
       FROM businesses
-      WHERE id = ?
-    `)
-    .get(req.business.id);
+      WHERE id = $1
+      `,
+      [req.business.id]
+    );
 
-  res.json(business);
+    if (!result.rows[0]) {
+      return res.status(404).json({
+        error: "Business not found."
+      });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Unable to load account."
+    });
+  }
 });
 
 /* -----------------------------
    CREATE PRODUCT
 ----------------------------- */
 
-app.post("/api/products", auth, (req, res) => {
-  const {
-    brand,
-    productName,
-    batch
-  } = req.body || {};
+app.post(
+  "/api/products",
+  auth,
+  async (req, res) => {
+    const {
+      brand,
+      productName,
+      batch
+    } = req.body || {};
 
-  if (!brand || !productName) {
-    return res.status(400).json({
-      error: "Brand and product name are required."
-    });
+    if (!brand || !productName) {
+      return res.status(400).json({
+        error:
+          "Brand and product name are required."
+      });
+    }
+
+    try {
+      const code = await makeCode();
+      const createdAt = now();
+
+      const result = await pool.query(
+        `
+        INSERT INTO products
+        (
+          business_id,
+          brand,
+          product_name,
+          batch,
+          code,
+          created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+        `,
+        [
+          req.business.id,
+          String(brand).trim(),
+          String(productName).trim(),
+          String(batch || "").trim(),
+          code,
+          createdAt
+        ]
+      );
+
+      res.status(201).json(
+        publicProduct(result.rows[0])
+      );
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: "Unable to register product."
+      });
+    }
   }
-
-  const code = makeCode();
-  const createdAt = now();
-
-  const info = db
-    .prepare(`
-      INSERT INTO products
-      (
-        business_id,
-        brand,
-        product_name,
-        batch,
-        code,
-        created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    .run(
-      req.business.id,
-      String(brand).trim(),
-      String(productName).trim(),
-      String(batch || "").trim(),
-      code,
-      createdAt
-    );
-
-  const product = db
-    .prepare(
-      "SELECT * FROM products WHERE id = ?"
-    )
-    .get(info.lastInsertRowid);
-
-  res.status(201).json(
-    publicProduct(product)
-  );
-});
+);
 
 /* -----------------------------
    LIST PRODUCTS
 ----------------------------- */
 
-app.get("/api/products", auth, (req, res) => {
-  const products = db
-    .prepare(`
-      SELECT *
-      FROM products
-      WHERE business_id = ?
-      ORDER BY id DESC
-    `)
-    .all(req.business.id);
+app.get(
+  "/api/products",
+  auth,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+        SELECT *
+        FROM products
+        WHERE business_id = $1
+        ORDER BY id DESC
+        `,
+        [req.business.id]
+      );
 
-  res.json(
-    products.map(publicProduct)
-  );
-});
+      res.json(
+        result.rows.map(publicProduct)
+      );
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: "Unable to load products."
+      });
+    }
+  }
+);
+
+/* -----------------------------
+   DELETE PRODUCT
+----------------------------- */
+
+app.delete(
+  "/api/products/:code",
+  auth,
+  async (req, res) => {
+    const code = String(
+      req.params.code || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    try {
+      const result = await pool.query(
+        `
+        DELETE FROM products
+        WHERE code = $1
+        AND business_id = $2
+        RETURNING id
+        `,
+        [
+          code,
+          req.business.id
+        ]
+      );
+
+      if (!result.rowCount) {
+        return res.status(404).json({
+          error: "Product not found."
+        });
+      }
+
+      res.json({
+        ok: true,
+        message: "Product deleted."
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: "Unable to delete product."
+      });
+    }
+  }
+);
 
 /* -----------------------------
    CHANGE PRODUCT STATUS
@@ -326,7 +481,7 @@ app.get("/api/products", auth, (req, res) => {
 app.patch(
   "/api/products/:code/status",
   auth,
-  (req, res) => {
+  async (req, res) => {
     const status = req.body?.status;
 
     if (
@@ -341,28 +496,37 @@ app.patch(
       });
     }
 
-    const result = db
-      .prepare(`
+    try {
+      const result = await pool.query(
+        `
         UPDATE products
-        SET status = ?
-        WHERE code = ?
-        AND business_id = ?
-      `)
-      .run(
-        status,
-        req.params.code,
-        req.business.id
+        SET status = $1
+        WHERE code = $2
+        AND business_id = $3
+        `,
+        [
+          status,
+          req.params.code,
+          req.business.id
+        ]
       );
 
-    if (!result.changes) {
-      return res.status(404).json({
-        error: "Product not found."
+      if (!result.rowCount) {
+        return res.status(404).json({
+          error: "Product not found."
+        });
+      }
+
+      res.json({
+        ok: true
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: "Unable to update product."
       });
     }
-
-    res.json({
-      ok: true
-    });
   }
 );
 
@@ -374,47 +538,56 @@ app.get(
   "/api/products/:code/qr",
   auth,
   async (req, res) => {
-    const product = db
-      .prepare(`
+    try {
+      const result = await pool.query(
+        `
         SELECT *
         FROM products
-        WHERE code = ?
-        AND business_id = ?
-      `)
-      .get(
-        req.params.code,
-        req.business.id
+        WHERE code = $1
+        AND business_id = $2
+        `,
+        [
+          req.params.code,
+          req.business.id
+        ]
       );
 
-    if (!product) {
-      return res.status(404).json({
-        error: "Product not found."
-      });
-    }
+      const product = result.rows[0];
 
-    const base =
-      process.env.PUBLIC_BASE_URL ||
-      `${req.protocol}://${req.get("host")}`;
+      if (!product) {
+        return res.status(404).json({
+          error: "Product not found."
+        });
+      }
 
-    const verifyUrl =
-      `${base}/?verify=${encodeURIComponent(product.code)}#verify`;
+      const base =
+        process.env.PUBLIC_BASE_URL ||
+        `${req.protocol}://${req.get("host")}`;
 
-    try {
-      const data = await QRCode.toDataURL(
-        verifyUrl,
-        {
-          margin: 2,
-          width: 600
-        }
-      );
+      const verifyUrl =
+        `${base}/?verify=${encodeURIComponent(
+          product.code
+        )}#verify`;
+
+      const data =
+        await QRCode.toDataURL(
+          verifyUrl,
+          {
+            margin: 2,
+            width: 600
+          }
+        );
 
       res.json({
         url: verifyUrl,
         data
       });
-    } catch {
+    } catch (error) {
+      console.error(error);
+
       res.status(500).json({
-        error: "Unable to generate QR code."
+        error:
+          "Unable to generate QR code."
       });
     }
   }
@@ -426,102 +599,135 @@ app.get(
 
 app.get(
   "/api/verify/:code",
-  (req, res) => {
+  async (req, res) => {
     const code = String(
       req.params.code || ""
     )
       .trim()
       .toUpperCase();
 
-    const product = db
-      .prepare(
-        "SELECT * FROM products WHERE code = ?"
-      )
-      .get(code);
-
-    /* Code doesn't exist */
-    if (!product) {
-      db.prepare(`
-        INSERT INTO verifications
-        (code, result, checked_at)
-        VALUES (?, ?, ?)
-      `).run(
-        code,
-        "not_verified",
-        now()
+    try {
+      const result = await pool.query(
+        `
+        SELECT *
+        FROM products
+        WHERE code = $1
+        `,
+        [code]
       );
 
-      return res.json({
-        result: "not_verified",
-        message:
-          "This code is not registered in the VerifyIt database."
+      const product = result.rows[0];
+
+      /* Code doesn't exist */
+
+      if (!product) {
+        await pool.query(
+          `
+          INSERT INTO verifications
+          (code, result, checked_at)
+          VALUES ($1, $2, $3)
+          `,
+          [
+            code,
+            "not_verified",
+            now()
+          ]
+        );
+
+        return res.json({
+          result: "not_verified",
+          message:
+            "This code is not registered in the VerifyIt database."
+        });
+      }
+
+      /* Determine result */
+
+      let verificationResult;
+
+      if (product.status !== "active") {
+        verificationResult = "warning";
+      } else if (
+        Number(product.verification_count) >= 5
+      ) {
+        verificationResult = "warning";
+      } else {
+        verificationResult = "authentic";
+      }
+
+      let message;
+
+      if (product.status !== "active") {
+        message =
+          `This product record is marked ${product.status}.`;
+      } else if (
+        verificationResult === "warning"
+      ) {
+        message =
+          "This code is registered, but it has unusually high verification activity. Check the item with the seller or manufacturer.";
+      } else {
+        message =
+          "The code matches a registered product record.";
+      }
+
+      /* Increase verification count */
+
+      await pool.query(
+        `
+        UPDATE products
+        SET verification_count =
+          verification_count + 1
+        WHERE id = $1
+        `,
+        [product.id]
+      );
+
+      /* Record verification */
+
+      await pool.query(
+        `
+        INSERT INTO verifications
+        (
+          product_id,
+          code,
+          result,
+          checked_at
+        )
+        VALUES ($1, $2, $3, $4)
+        `,
+        [
+          product.id,
+          code,
+          verificationResult,
+          now()
+        ]
+      );
+
+      const freshResult =
+        await pool.query(
+          `
+          SELECT *
+          FROM products
+          WHERE id = $1
+          `,
+          [product.id]
+        );
+
+      res.json({
+        result: verificationResult,
+        product: publicProduct(
+          freshResult.rows[0]
+        ),
+        message
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          "Unable to verify product."
       });
     }
-
-    /* Determine result */
-    let result;
-
-    if (product.status !== "active") {
-      result = "warning";
-    } else if (
-      product.verification_count >= 5
-    ) {
-      result = "warning";
-    } else {
-      result = "authentic";
-    }
-
-    let message;
-
-    if (product.status !== "active") {
-      message =
-        `This product record is marked ${product.status}.`;
-    } else if (result === "warning") {
-      message =
-        "This code is registered, but it has unusually high verification activity. Check the item with the seller or manufacturer.";
-    } else {
-      message =
-        "The code matches a registered product record.";
-    }
-
-    /* Increase verification count */
-    db.prepare(`
-      UPDATE products
-      SET verification_count =
-        verification_count + 1
-      WHERE id = ?
-    `).run(product.id);
-
-    /* Record verification */
-    db.prepare(`
-      INSERT INTO verifications
-      (
-        product_id,
-        code,
-        result,
-        checked_at
-      )
-      VALUES (?, ?, ?, ?)
-    `).run(
-      product.id,
-      code,
-      result,
-      now()
-    );
-
-    const freshProduct = db
-      .prepare(
-        "SELECT * FROM products WHERE id = ?"
-      )
-      .get(product.id);
-
-    res.json({
-      result,
-      product: publicProduct(
-        freshProduct
-      ),
-      message
-    });
   }
 );
 
@@ -532,41 +738,59 @@ app.get(
 app.get(
   "/api/stats",
   auth,
-  (req, res) => {
-    const products = db
-      .prepare(`
-        SELECT COUNT(*) AS count
-        FROM products
-        WHERE business_id = ?
-      `)
-      .get(req.business.id).count;
+  async (req, res) => {
+    try {
+      const products =
+        await pool.query(
+          `
+          SELECT COUNT(*) AS count
+          FROM products
+          WHERE business_id = $1
+          `,
+          [req.business.id]
+        );
 
-    const checks = db
-      .prepare(`
-        SELECT COUNT(*) AS count
-        FROM verifications v
-        JOIN products p
-          ON p.id = v.product_id
-        WHERE p.business_id = ?
-      `)
-      .get(req.business.id).count;
+      const checks =
+        await pool.query(
+          `
+          SELECT COUNT(*) AS count
+          FROM verifications v
+          JOIN products p
+            ON p.id = v.product_id
+          WHERE p.business_id = $1
+          `,
+          [req.business.id]
+        );
 
-    const warnings = db
-      .prepare(`
-        SELECT COUNT(*) AS count
-        FROM verifications v
-        JOIN products p
-          ON p.id = v.product_id
-        WHERE p.business_id = ?
-        AND v.result = 'warning'
-      `)
-      .get(req.business.id).count;
+      const warnings =
+        await pool.query(
+          `
+          SELECT COUNT(*) AS count
+          FROM verifications v
+          JOIN products p
+            ON p.id = v.product_id
+          WHERE p.business_id = $1
+          AND v.result = 'warning'
+          `,
+          [req.business.id]
+        );
 
-    res.json({
-      products,
-      checks,
-      warnings
-    });
+      res.json({
+        products:
+          Number(products.rows[0].count),
+        checks:
+          Number(checks.rows[0].count),
+        warnings:
+          Number(warnings.rows[0].count)
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          "Unable to load statistics."
+      });
+    }
   }
 );
 
@@ -588,8 +812,19 @@ app.get("*", (_req, res) => {
    START SERVER
 ----------------------------- */
 
-app.listen(PORT, () => {
-  console.log(
-    `VerifyIt V1.2 running on port ${PORT}`
-  );
-});
+initDatabase()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(
+        `VerifyIt V1.3 running on port ${PORT}`
+      );
+    });
+  })
+  .catch((error) => {
+    console.error(
+      "Database initialization failed:",
+      error
+    );
+
+    process.exit(1);
+  });
