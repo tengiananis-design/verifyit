@@ -52,6 +52,7 @@ async function initDatabase() {
       status TEXT NOT NULL DEFAULT 'active',
       verification_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
+      image_data TEXT DEFAULT '',
       FOREIGN KEY (business_id)
         REFERENCES businesses(id)
         ON DELETE CASCADE
@@ -67,6 +68,9 @@ async function initDatabase() {
         REFERENCES products(id)
         ON DELETE SET NULL
     );
+
+    ALTER TABLE products
+    ADD COLUMN IF NOT EXISTS image_data TEXT DEFAULT '';
   `);
 
   console.log("VerifyIt PostgreSQL database ready.");
@@ -136,8 +140,15 @@ function auth(req, res, next) {
   }
 }
 
-function publicProduct(product) {
-  return {
+/*
+  Public product data.
+
+  includeImage = true is used when the customer
+  verifies a product so the actual registered
+  product image can be displayed.
+*/
+function publicProduct(product, includeImage = false) {
+  const result = {
     brand: product.brand,
     productName: product.product_name,
     batch: product.batch,
@@ -147,13 +158,55 @@ function publicProduct(product) {
       Number(product.verification_count),
     createdAt: product.created_at
   };
+
+  if (includeImage) {
+    result.imageData = product.image_data || "";
+  }
+
+  return result;
+}
+
+/* -----------------------------
+   IMAGE VALIDATION
+----------------------------- */
+
+function validImageData(imageData) {
+  if (!imageData) {
+    return true;
+  }
+
+  if (typeof imageData !== "string") {
+    return false;
+  }
+
+  const validPrefix =
+    /^data:image\/(jpeg|jpg|png|webp);base64,/i;
+
+  if (!validPrefix.test(imageData)) {
+    return false;
+  }
+
+  /*
+    Keep the prototype reasonably small.
+
+    The frontend compresses images before sending them.
+  */
+  if (imageData.length > 1500000) {
+    return false;
+  }
+
+  return true;
 }
 
 /* -----------------------------
    EXPRESS
 ----------------------------- */
 
-app.use(express.json({ limit: "50kb" }));
+app.use(
+  express.json({
+    limit: "2mb"
+  })
+);
 
 app.use(
   express.static(
@@ -165,172 +218,192 @@ app.use(
    HEALTH CHECK
 ----------------------------- */
 
-app.get("/api/health", async (_req, res) => {
-  try {
-    await pool.query("SELECT 1");
+app.get(
+  "/api/health",
+  async (_req, res) => {
+    try {
+      await pool.query("SELECT 1");
 
-    res.json({
-      ok: true,
-      service: "VerifyIt",
-      version: "1.3.0",
-      database: "postgresql"
-    });
-  } catch {
-    res.status(500).json({
-      ok: false,
-      error: "Database connection failed."
-    });
+      res.json({
+        ok: true,
+        service: "VerifyIt",
+        version: "1.4.0",
+        database: "postgresql"
+      });
+    } catch {
+      res.status(500).json({
+        ok: false,
+        error: "Database connection failed."
+      });
+    }
   }
-});
+);
 
 /* -----------------------------
    BUSINESS REGISTRATION
 ----------------------------- */
 
-app.post("/api/register", async (req, res) => {
-  const {
-    name,
-    email,
-    password
-  } = req.body || {};
+app.post(
+  "/api/register",
+  async (req, res) => {
+    const {
+      name,
+      email,
+      password
+    } = req.body || {};
 
-  if (
-    !name ||
-    !email ||
-    !password ||
-    password.length < 8
-  ) {
-    return res.status(400).json({
-      error:
-        "Name, email and a password of at least 8 characters are required."
-    });
-  }
-
-  try {
-    const hash = await bcrypt.hash(password, 12);
-
-    const result = await pool.query(
-      `
-      INSERT INTO businesses
-      (name, email, password_hash, created_at)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, name, email
-      `,
-      [
-        String(name).trim(),
-        String(email).trim().toLowerCase(),
-        hash,
-        now()
-      ]
-    );
-
-    const business = result.rows[0];
-
-    res.status(201).json({
-      token: tokenFor(business),
-      business
-    });
-  } catch (error) {
-    if (error.code === "23505") {
-      return res.status(409).json({
+    if (
+      !name ||
+      !email ||
+      !password ||
+      password.length < 8
+    ) {
+      return res.status(400).json({
         error:
-          "That email is already registered."
+          "Name, email and a password of at least 8 characters are required."
       });
     }
 
-    console.error(error);
+    try {
+      const hash =
+        await bcrypt.hash(password, 12);
 
-    res.status(500).json({
-      error: "Unable to create account."
-    });
+      const result =
+        await pool.query(
+          `
+          INSERT INTO businesses
+          (name, email, password_hash, created_at)
+          VALUES ($1, $2, $3, $4)
+          RETURNING id, name, email
+          `,
+          [
+            String(name).trim(),
+            String(email)
+              .trim()
+              .toLowerCase(),
+            hash,
+            now()
+          ]
+        );
+
+      const business = result.rows[0];
+
+      res.status(201).json({
+        token: tokenFor(business),
+        business
+      });
+    } catch (error) {
+      if (error.code === "23505") {
+        return res.status(409).json({
+          error:
+            "That email is already registered."
+        });
+      }
+
+      console.error(error);
+
+      res.status(500).json({
+        error: "Unable to create account."
+      });
+    }
   }
-});
+);
 
 /* -----------------------------
    BUSINESS LOGIN
 ----------------------------- */
 
-app.post("/api/login", async (req, res) => {
-  const {
-    email,
-    password
-  } = req.body || {};
+app.post(
+  "/api/login",
+  async (req, res) => {
+    const {
+      email,
+      password
+    } = req.body || {};
 
-  try {
-    const result = await pool.query(
-      `
-      SELECT *
-      FROM businesses
-      WHERE email = $1
-      `,
-      [
-        String(email || "")
-          .trim()
-          .toLowerCase()
-      ]
-    );
+    try {
+      const result =
+        await pool.query(
+          `
+          SELECT *
+          FROM businesses
+          WHERE email = $1
+          `,
+          [
+            String(email || "")
+              .trim()
+              .toLowerCase()
+          ]
+        );
 
-    const business = result.rows[0];
+      const business = result.rows[0];
 
-    if (
-      !business ||
-      !(await bcrypt.compare(
-        String(password || ""),
-        business.password_hash
-      ))
-    ) {
-      return res.status(401).json({
-        error: "Invalid email or password."
+      if (
+        !business ||
+        !(await bcrypt.compare(
+          String(password || ""),
+          business.password_hash
+        ))
+      ) {
+        return res.status(401).json({
+          error:
+            "Invalid email or password."
+        });
+      }
+
+      res.json({
+        token: tokenFor(business),
+        business: {
+          id: business.id,
+          name: business.name,
+          email: business.email
+        }
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: "Unable to log in."
       });
     }
-
-    res.json({
-      token: tokenFor(business),
-      business: {
-        id: business.id,
-        name: business.name,
-        email: business.email
-      }
-    });
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      error: "Unable to log in."
-    });
   }
-});
+);
 
 /* -----------------------------
    CURRENT BUSINESS
 ----------------------------- */
 
-app.get("/api/me", auth, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `
-      SELECT id, name, email, created_at
-      FROM businesses
-      WHERE id = $1
-      `,
-      [req.business.id]
-    );
+app.get(
+  "/api/me",
+  auth,
+  async (req, res) => {
+    try {
+      const result =
+        await pool.query(
+          `
+          SELECT id, name, email, created_at
+          FROM businesses
+          WHERE id = $1
+          `,
+          [req.business.id]
+        );
 
-    if (!result.rows[0]) {
-      return res.status(404).json({
-        error: "Business not found."
+      if (!result.rows[0]) {
+        return res.status(404).json({
+          error: "Business not found."
+        });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: "Unable to load account."
       });
     }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      error: "Unable to load account."
-    });
   }
-});
+);
 
 /* -----------------------------
    CREATE PRODUCT
@@ -343,7 +416,8 @@ app.post(
     const {
       brand,
       productName,
-      batch
+      batch,
+      imageData
     } = req.body || {};
 
     if (!brand || !productName) {
@@ -353,42 +427,56 @@ app.post(
       });
     }
 
+    if (!validImageData(imageData)) {
+      return res.status(400).json({
+        error:
+          "Invalid or oversized product image."
+      });
+    }
+
     try {
       const code = await makeCode();
       const createdAt = now();
 
-      const result = await pool.query(
-        `
-        INSERT INTO products
-        (
-          business_id,
-          brand,
-          product_name,
-          batch,
-          code,
-          created_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *
-        `,
-        [
-          req.business.id,
-          String(brand).trim(),
-          String(productName).trim(),
-          String(batch || "").trim(),
-          code,
-          createdAt
-        ]
-      );
+      const result =
+        await pool.query(
+          `
+          INSERT INTO products
+          (
+            business_id,
+            brand,
+            product_name,
+            batch,
+            code,
+            created_at,
+            image_data
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *
+          `,
+          [
+            req.business.id,
+            String(brand).trim(),
+            String(productName).trim(),
+            String(batch || "").trim(),
+            code,
+            createdAt,
+            String(imageData || "")
+          ]
+        );
 
       res.status(201).json(
-        publicProduct(result.rows[0])
+        publicProduct(
+          result.rows[0],
+          true
+        )
       );
     } catch (error) {
       console.error(error);
 
       res.status(500).json({
-        error: "Unable to register product."
+        error:
+          "Unable to register product."
       });
     }
   }
@@ -403,24 +491,150 @@ app.get(
   auth,
   async (req, res) => {
     try {
-      const result = await pool.query(
-        `
-        SELECT *
-        FROM products
-        WHERE business_id = $1
-        ORDER BY id DESC
-        `,
-        [req.business.id]
-      );
+      const result =
+        await pool.query(
+          `
+          SELECT *
+          FROM products
+          WHERE business_id = $1
+          ORDER BY id DESC
+          `,
+          [req.business.id]
+        );
 
       res.json(
-        result.rows.map(publicProduct)
+        result.rows.map(
+          product =>
+            publicProduct(product, false)
+        )
       );
     } catch (error) {
       console.error(error);
 
       res.status(500).json({
-        error: "Unable to load products."
+        error:
+          "Unable to load products."
+      });
+    }
+  }
+);
+
+/* -----------------------------
+   GET PRODUCT IMAGE
+----------------------------- */
+
+app.get(
+  "/api/products/:code/image",
+  auth,
+  async (req, res) => {
+    const code = String(
+      req.params.code || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    try {
+      const result =
+        await pool.query(
+          `
+          SELECT image_data
+          FROM products
+          WHERE code = $1
+          AND business_id = $2
+          `,
+          [
+            code,
+            req.business.id
+          ]
+        );
+
+      const product = result.rows[0];
+
+      if (!product) {
+        return res.status(404).json({
+          error:
+            "Product not found."
+        });
+      }
+
+      res.json({
+        imageData:
+          product.image_data || ""
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          "Unable to load product image."
+      });
+    }
+  }
+);
+
+/* -----------------------------
+   REPLACE PRODUCT IMAGE
+----------------------------- */
+
+app.patch(
+  "/api/products/:code/image",
+  auth,
+  async (req, res) => {
+    const code = String(
+      req.params.code || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    const {
+      imageData
+    } = req.body || {};
+
+    if (!validImageData(imageData)) {
+      return res.status(400).json({
+        error:
+          "Invalid or oversized product image."
+      });
+    }
+
+    try {
+      const result =
+        await pool.query(
+          `
+          UPDATE products
+          SET image_data = $1
+          WHERE code = $2
+          AND business_id = $3
+          RETURNING *
+          `,
+          [
+            String(imageData || ""),
+            code,
+            req.business.id
+          ]
+        );
+
+      if (!result.rowCount) {
+        return res.status(404).json({
+          error:
+            "Product not found."
+        });
+      }
+
+      res.json({
+        ok: true,
+        product:
+          publicProduct(
+            result.rows[0],
+            true
+          )
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          "Unable to update product image."
       });
     }
   }
@@ -441,34 +655,38 @@ app.delete(
       .toUpperCase();
 
     try {
-      const result = await pool.query(
-        `
-        DELETE FROM products
-        WHERE code = $1
-        AND business_id = $2
-        RETURNING id
-        `,
-        [
-          code,
-          req.business.id
-        ]
-      );
+      const result =
+        await pool.query(
+          `
+          DELETE FROM products
+          WHERE code = $1
+          AND business_id = $2
+          RETURNING id
+          `,
+          [
+            code,
+            req.business.id
+          ]
+        );
 
       if (!result.rowCount) {
         return res.status(404).json({
-          error: "Product not found."
+          error:
+            "Product not found."
         });
       }
 
       res.json({
         ok: true,
-        message: "Product deleted."
+        message:
+          "Product deleted."
       });
     } catch (error) {
       console.error(error);
 
       res.status(500).json({
-        error: "Unable to delete product."
+        error:
+          "Unable to delete product."
       });
     }
   }
@@ -482,7 +700,8 @@ app.patch(
   "/api/products/:code/status",
   auth,
   async (req, res) => {
-    const status = req.body?.status;
+    const status =
+      req.body?.status;
 
     if (
       ![
@@ -492,28 +711,31 @@ app.patch(
       ].includes(status)
     ) {
       return res.status(400).json({
-        error: "Invalid status."
+        error:
+          "Invalid status."
       });
     }
 
     try {
-      const result = await pool.query(
-        `
-        UPDATE products
-        SET status = $1
-        WHERE code = $2
-        AND business_id = $3
-        `,
-        [
-          status,
-          req.params.code,
-          req.business.id
-        ]
-      );
+      const result =
+        await pool.query(
+          `
+          UPDATE products
+          SET status = $1
+          WHERE code = $2
+          AND business_id = $3
+          `,
+          [
+            status,
+            req.params.code,
+            req.business.id
+          ]
+        );
 
       if (!result.rowCount) {
         return res.status(404).json({
-          error: "Product not found."
+          error:
+            "Product not found."
         });
       }
 
@@ -524,7 +746,8 @@ app.patch(
       console.error(error);
 
       res.status(500).json({
-        error: "Unable to update product."
+        error:
+          "Unable to update product."
       });
     }
   }
@@ -539,24 +762,27 @@ app.get(
   auth,
   async (req, res) => {
     try {
-      const result = await pool.query(
-        `
-        SELECT *
-        FROM products
-        WHERE code = $1
-        AND business_id = $2
-        `,
-        [
-          req.params.code,
-          req.business.id
-        ]
-      );
+      const result =
+        await pool.query(
+          `
+          SELECT *
+          FROM products
+          WHERE code = $1
+          AND business_id = $2
+          `,
+          [
+            req.params.code,
+            req.business.id
+          ]
+        );
 
-      const product = result.rows[0];
+      const product =
+        result.rows[0];
 
       if (!product) {
         return res.status(404).json({
-          error: "Product not found."
+          error:
+            "Product not found."
         });
       }
 
@@ -607,16 +833,18 @@ app.get(
       .toUpperCase();
 
     try {
-      const result = await pool.query(
-        `
-        SELECT *
-        FROM products
-        WHERE code = $1
-        `,
-        [code]
-      );
+      const result =
+        await pool.query(
+          `
+          SELECT *
+          FROM products
+          WHERE code = $1
+          `,
+          [code]
+        );
 
-      const product = result.rows[0];
+      const product =
+        result.rows[0];
 
       /* Code doesn't exist */
 
@@ -635,7 +863,8 @@ app.get(
         );
 
         return res.json({
-          result: "not_verified",
+          result:
+            "not_verified",
           message:
             "This code is not registered in the VerifyIt database."
         });
@@ -645,23 +874,33 @@ app.get(
 
       let verificationResult;
 
-      if (product.status !== "active") {
-        verificationResult = "warning";
-      } else if (
-        Number(product.verification_count) >= 5
+      if (
+        product.status !== "active"
       ) {
-        verificationResult = "warning";
+        verificationResult =
+          "warning";
+      } else if (
+        Number(
+          product.verification_count
+        ) >= 5
+      ) {
+        verificationResult =
+          "warning";
       } else {
-        verificationResult = "authentic";
+        verificationResult =
+          "authentic";
       }
 
       let message;
 
-      if (product.status !== "active") {
+      if (
+        product.status !== "active"
+      ) {
         message =
           `This product record is marked ${product.status}.`;
       } else if (
-        verificationResult === "warning"
+        verificationResult ===
+        "warning"
       ) {
         message =
           "This code is registered, but it has unusually high verification activity. Check the item with the seller or manufacturer.";
@@ -703,6 +942,8 @@ app.get(
         ]
       );
 
+      /* Get updated product */
+
       const freshResult =
         await pool.query(
           `
@@ -714,10 +955,15 @@ app.get(
         );
 
       res.json({
-        result: verificationResult,
-        product: publicProduct(
-          freshResult.rows[0]
-        ),
+        result:
+          verificationResult,
+
+        product:
+          publicProduct(
+            freshResult.rows[0],
+            true
+          ),
+
         message
       });
     } catch (error) {
@@ -777,11 +1023,19 @@ app.get(
 
       res.json({
         products:
-          Number(products.rows[0].count),
+          Number(
+            products.rows[0].count
+          ),
+
         checks:
-          Number(checks.rows[0].count),
+          Number(
+            checks.rows[0].count
+          ),
+
         warnings:
-          Number(warnings.rows[0].count)
+          Number(
+            warnings.rows[0].count
+          )
       });
     } catch (error) {
       console.error(error);
@@ -798,15 +1052,18 @@ app.get(
    FRONTEND
 ----------------------------- */
 
-app.get("*", (_req, res) => {
-  res.sendFile(
-    path.join(
-      __dirname,
-      "public",
-      "index.html"
-    )
-  );
-});
+app.get(
+  "*",
+  (_req, res) => {
+    res.sendFile(
+      path.join(
+        __dirname,
+        "public",
+        "index.html"
+      )
+    );
+  }
+);
 
 /* -----------------------------
    START SERVER
@@ -814,11 +1071,14 @@ app.get("*", (_req, res) => {
 
 initDatabase()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(
-        `VerifyIt V1.3 running on port ${PORT}`
-      );
-    });
+    app.listen(
+      PORT,
+      () => {
+        console.log(
+          `VerifyIt V1.4 running on port ${PORT}`
+        );
+      }
+    );
   })
   .catch((error) => {
     console.error(
