@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="VerifyIt helps brands give products a unique digital identity that customers can check by QR code or verification code.">
+<title>VerifyIt — Product Verification</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="brand-mark">V</span> VerifyIt</div>
+  <nav><a href="#verify">Verify</a><a href="#brands">For Brands</a><a href="#business">Business Portal</a></nav>
+</header>
+
+<main>
+<section class="hero">
+  <div class="hero-copy">
+    <span class="pill">PILOT VERSION • BUILT FOR REAL BRANDS</span>
+    <h1>Give every product a digital identity.</h1>
+    <p>Customers scan a QR code or enter a unique code to check whether it matches a product record registered by the brand.</p>
+    <div class="hero-actions">
+      <a class="button" href="#verify">Try a verification</a>
+      <a class="text-link" href="#brands">See how brands use it →</a>
+    </div>
+    <p class="disclaimer">VerifyIt checks a registered product record. It does not independently inspect or physically authenticate an item.</p>
+  </div>
+  <div class="card hero-card">
+    <div class="scan-icon">✓</div>
+    <div class="mini-label">CUSTOMER RESULT</div>
+    <h3>Product registered</h3>
+    <p>The code matches an active product record.</p>
+    <div class="demo-code">ABCD-EFGH-1234-5678</div>
+    <span class="status-chip">REGISTERED</span>
+  </div>
+</section>
+
+<section id="verify" class="section verify-section">
+  <div class="section-heading">
+    <span class="eyebrow">FOR CUSTOMERS</span>
+    <h2>Verify a product</h2>
+    <p>Enter the code printed on the item or packaging. A QR code can open this check automatically.</p>
+  </div>
+  <form id="verifyForm" class="form verify-form">
+    <input id="verifyCode" placeholder="Example: ABCD-EFGH-1234-5678" autocomplete="off" required>
+    <button class="button">Check product</button>
+  </form>
+  <div id="result" class="result hidden"></div>
+</section>
+
+<section id="brands" class="section brand-section">
+  <div class="section-heading">
+    <span class="eyebrow">FOR BRANDS</span>
+    <h2>Protect trust around your products.</h2>
+    <p>Register products, create unique verification codes, generate QR codes, and see how customers interact with your records.</p>
+  </div>
+  <div class="feature-grid">
+    <div class="feature-card"><b>01</b><h3>Register</h3><p>Create a product record with brand, product and optional batch information.</p></div>
+    <div class="feature-card"><b>02</b><h3>Label</h3><p>Generate a QR code that takes customers directly to the verification check.</p></div>
+    <div class="feature-card"><b>03</b><h3>Verify</h3><p>Customers can scan or type the unique code without installing an app.</p></div>
+    <div class="feature-card"><b>04</b><h3>Monitor</h3><p>Track verification activity and flag records that need attention.</p></div>
+  </div>
+</section>
+
+<section id="business" class="section alt">
+  <div class="section-heading">
+    <span class="eyebrow">BUSINESS PORTAL</span>
+    <h2>Start a pilot</h2>
+    <p>Create an account and register test products. This prototype is designed so we can demonstrate the workflow to our first business partner.</p>
+  </div>
+  <div class="auth-grid">
+    <form id="registerForm" class="card form-card">
+      <h3>Create business account</h3>
+      <input id="bizName" placeholder="Business name" required>
+      <input id="bizEmail" type="email" placeholder="Email" required>
+      <input id="bizPassword" type="password" placeholder="Password (8+ characters)" required>
+      <button class="button">Create account</button>
+    </form>
+    <form id="loginForm" class="card form-card">
+      <h3>Sign in</h3>
+      <input id="loginEmail" type="email" placeholder="Email" required>
+      <input id="loginPassword" type="password" placeholder="Password" required>
+      <button class="button">Sign in</button>
+    </form>
+  </div>
+  <div id="authMsg" class="result hidden"></div>
+</section>
+
+<section id="dashboard" class="section">
+  <div class="dash-head">
+    <div><span class="eyebrow">BUSINESS DASHBOARD</span><h2>Manage your products</h2><p id="who" class="muted">Sign in to manage products.</p></div>
+    <button id="logout" class="button secondary hidden">Log out</button>
+  </div>
+  <div class="stats">
+    <div><b id="count">—</b><span>Products</span></div>
+    <div><b id="verified">—</b><span>Total checks</span></div>
+    <div><b id="warnings">—</b><span>Warnings</span></div>
+  </div>
+  <form id="productForm" class="form grid hidden">
+    <input id="brand" placeholder="Brand name" required>
+    <input id="productName" placeholder="Product name" required>
+    <input id="batch" placeholder="Batch / lot (optional)">
+    <button class="button">Register product</button>
+  </form>
+  <div id="newProduct" class="result hidden"></div>
+  <div id="products"></div>
+</section>
+
+<section class="section final-note">
+  <div>
+    <span class="eyebrow">OUR POSITIONING</span>
+    <h2>Scan → Check → Trust</h2>
+    <p>VerifyIt is a product-record verification platform. A positive result means the submitted code matches a registered record; it is not a guarantee that the physical item has been independently inspected.</p>
+  </div>
+</section>
+</main>
+
+<footer>VerifyIt V1.2 Pilot • Product verification infrastructure for brands</footer>
+<script src="/app.js"></script>
+</body>
+</html>
