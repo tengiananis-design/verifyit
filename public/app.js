@@ -1,795 +1,1324 @@
-const $ = id => document.getElementById(id);
-
-const tokenKey = "verifyit_token";
-
-let token = localStorage.getItem(tokenKey);
+const $ = id =>
+  document.getElementById(id);
 
 
-/* =========================
-   SECURITY / HTML ESCAPING
-========================= */
-
-const esc = s =>
-  String(s ?? "").replace(
-    /[&<>"']/g,
-    c => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    }[c])
-  );
-
-
-/* =========================
+/* -----------------------------
    API HELPER
-========================= */
+----------------------------- */
 
-async function api(url, opts = {}) {
+async function api(
+  url,
+  options = {}
+) {
+  const token =
+    localStorage.getItem("verifyit_token");
 
-  opts.headers = {
-    ...(opts.headers || {}),
-    ...(token
-      ? { Authorization: "Bearer " + token }
-      : {})
+  const headers = {
+    ...(options.headers || {})
   };
 
-  return fetch(url, opts);
-}
+  if (
+    options.body &&
+    typeof options.body !== "string"
+  ) {
+    headers["Content-Type"] =
+      "application/json";
 
+    options.body =
+      JSON.stringify(options.body);
+  }
 
-/* =========================
-   CUSTOMER VERIFICATION
-========================= */
+  if (token) {
+    headers.Authorization =
+      `Bearer ${token}`;
+  }
 
-async function verify(code) {
+  const response =
+    await fetch(url, {
+      ...options,
+      headers
+    });
 
-  const r = await fetch(
-    "/api/verify/" + encodeURIComponent(code)
-  );
+  let data = {};
 
-  return r.json();
-}
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = {};
+  }
 
-
-function showResult(d) {
-
-  const b = $("result");
-
-  b.className = "result " + d.result;
-
-  b.innerHTML =
-    `
-      <h3>
-        ${
-          d.result === "authentic"
-            ? "✓ AUTHENTIC"
-            : d.result === "warning"
-              ? "⚠ WARNING"
-              : "✕ NOT VERIFIED"
-        }
-      </h3>
-
-      <p>${esc(d.message)}</p>
-    `
-
-    +
-
-    (
-      d.product
-        ? `
-          <p>
-            <b>${esc(d.product.brand)}</b>
-            —
-            ${esc(d.product.productName)}
-            <br>
-
-            Code:
-            <span class="code">
-              ${esc(d.product.code)}
-            </span>
-
-            <br>
-
-            Batch:
-            ${esc(d.product.batch || "Not provided")}
-          </p>
-        `
-        : ""
-    );
-}
-
-
-$("verifyForm").addEventListener(
-  "submit",
-  async e => {
-
-    e.preventDefault();
-
-    showResult(
-      await verify(
-        $("verifyCode").value.trim()
-      )
+  if (!response.ok) {
+    throw new Error(
+      data.error ||
+      "Something went wrong."
     );
   }
-);
 
-
-/* =========================
-   QR VERIFICATION LINK
-========================= */
-
-const qs = new URLSearchParams(
-  location.search
-);
-
-if (qs.get("verify")) {
-
-  $("verifyCode").value =
-    qs.get("verify");
-
-  verify(
-    qs.get("verify")
-  ).then(showResult);
+  return data;
 }
 
 
-/* =========================
-   LOAD BUSINESS DASHBOARD
-========================= */
+/* -----------------------------
+   IMAGE COMPRESSION
+----------------------------- */
 
-async function loadDash() {
+function compressImage(
+  file
+) {
+  return new Promise(
+    (resolve, reject) => {
+
+      const reader =
+        new FileReader();
+
+      reader.onload = () => {
+
+        const image =
+          new Image();
+
+        image.onload = () => {
+
+          const maxSize = 1200;
+
+          let width =
+            image.width;
+
+          let height =
+            image.height;
+
+          if (
+            width > maxSize ||
+            height > maxSize
+          ) {
+
+            if (
+              width > height
+            ) {
+              height =
+                Math.round(
+                  height *
+                  (maxSize / width)
+                );
+
+              width =
+                maxSize;
+
+            } else {
+
+              width =
+                Math.round(
+                  width *
+                  (maxSize / height)
+                );
+
+              height =
+                maxSize;
+            }
+          }
+
+          const canvas =
+            document.createElement(
+              "canvas"
+            );
+
+          canvas.width =
+            width;
+
+          canvas.height =
+            height;
+
+          const ctx =
+            canvas.getContext(
+              "2d"
+            );
+
+          ctx.drawImage(
+            image,
+            0,
+            0,
+            width,
+            height
+          );
+
+          resolve(
+            canvas.toDataURL(
+              "image/jpeg",
+              0.78
+            )
+          );
+        };
+
+        image.onerror =
+          () =>
+            reject(
+              new Error(
+                "Unable to read image."
+              )
+            );
+
+        image.src =
+          reader.result;
+      };
+
+      reader.onerror =
+        () =>
+          reject(
+            new Error(
+              "Unable to load image."
+            )
+          );
+
+      reader.readAsDataURL(file);
+    }
+  );
+}
+
+
+/* -----------------------------
+   AUTH DISPLAY
+----------------------------- */
+
+function showDashboard(
+  business
+) {
+
+  $("authArea").hidden =
+    true;
+
+  $("dashboard").hidden =
+    false;
+
+  $("businessName")
+    .textContent =
+    business?.name ||
+    "Business Dashboard";
+
+  $("businessEmail")
+    .textContent =
+    business?.email || "";
+
+  loadDashboard();
+}
+
+
+function showAuth() {
+
+  $("authArea").hidden =
+    false;
+
+  $("dashboard").hidden =
+    true;
+}
+
+
+/* -----------------------------
+   LOAD CURRENT USER
+----------------------------- */
+
+async function loadCurrentUser() {
+
+  const token =
+    localStorage.getItem(
+      "verifyit_token"
+    );
 
   if (!token) {
+    showAuth();
+    return;
+  }
 
-    $("productForm")
-      .classList
-      .add("hidden");
+  try {
 
-    $("logout")
-      .classList
-      .add("hidden");
+    const business =
+      await api(
+        "/api/me"
+      );
 
-    $("who").textContent =
-      "Sign in to manage products.";
+    showDashboard(
+      business
+    );
+
+  } catch {
+
+    localStorage.removeItem(
+      "verifyit_token"
+    );
+
+    showAuth();
+  }
+}
+
+
+/* -----------------------------
+   REGISTER
+----------------------------- */
+
+$("registerForm")
+  .addEventListener(
+    "submit",
+    async event => {
+
+      event.preventDefault();
+
+      try {
+
+        const data =
+          await api(
+            "/api/register",
+            {
+              method: "POST",
+              body: {
+                name:
+                  $("registerName")
+                    .value
+                    .trim(),
+
+                email:
+                  $("registerEmail")
+                    .value
+                    .trim(),
+
+                password:
+                  $("registerPassword")
+                    .value
+              }
+            }
+          );
+
+        localStorage.setItem(
+          "verifyit_token",
+          data.token
+        );
+
+        showDashboard(
+          data.business
+        );
+
+      } catch (error) {
+
+        alert(
+          error.message
+        );
+      }
+    }
+  );
+
+
+/* -----------------------------
+   LOGIN
+----------------------------- */
+
+$("loginForm")
+  .addEventListener(
+    "submit",
+    async event => {
+
+      event.preventDefault();
+
+      try {
+
+        const data =
+          await api(
+            "/api/login",
+            {
+              method: "POST",
+              body: {
+                email:
+                  $("loginEmail")
+                    .value
+                    .trim(),
+
+                password:
+                  $("loginPassword")
+                    .value
+              }
+            }
+          );
+
+        localStorage.setItem(
+          "verifyit_token",
+          data.token
+        );
+
+        showDashboard(
+          data.business
+        );
+
+      } catch (error) {
+
+        alert(
+          error.message
+        );
+      }
+    }
+  );
+
+
+/* -----------------------------
+   LOGOUT
+----------------------------- */
+
+$("logoutButton")
+  .addEventListener(
+    "click",
+    () => {
+
+      localStorage.removeItem(
+        "verifyit_token"
+      );
+
+      showAuth();
+    }
+  );
+
+
+/* -----------------------------
+   PRODUCT IMAGE PREVIEW
+----------------------------- */
+
+$("productImage")
+  .addEventListener(
+    "change",
+    async event => {
+
+      const file =
+        event.target.files?.[0];
+
+      if (!file) {
+
+        $("imagePreview").hidden =
+          true;
+
+        return;
+      }
+
+      try {
+
+        const imageData =
+          await compressImage(
+            file
+          );
+
+        $("productImagePreview")
+          .src =
+          imageData;
+
+        $("imagePreview")
+          .hidden =
+          false;
+
+      } catch (error) {
+
+        alert(
+          error.message
+        );
+
+        event.target.value =
+          "";
+
+        $("imagePreview").hidden =
+          true;
+      }
+    }
+  );
+
+
+/* -----------------------------
+   REGISTER PRODUCT
+----------------------------- */
+
+$("productForm")
+  .addEventListener(
+    "submit",
+    async event => {
+
+      event.preventDefault();
+
+      try {
+
+        const file =
+          $("productImage")
+            .files?.[0];
+
+        let imageData =
+          "";
+
+        if (file) {
+
+          imageData =
+            await compressImage(
+              file
+            );
+        }
+
+        const product =
+          await api(
+            "/api/products",
+            {
+              method: "POST",
+
+              body: {
+                brand:
+                  $("productBrand")
+                    .value
+                    .trim(),
+
+                productName:
+                  $("productName")
+                    .value
+                    .trim(),
+
+                batch:
+                  $("productBatch")
+                    .value
+                    .trim(),
+
+                imageData
+              }
+            }
+          );
+
+        alert(
+          `Product registered successfully.\n\nVerification code:\n${product.code}`
+        );
+
+        $("productForm")
+          .reset();
+
+        $("imagePreview")
+          .hidden =
+          true;
+
+        await loadDashboard();
+
+      } catch (error) {
+
+        alert(
+          error.message
+        );
+      }
+    }
+  );
+
+
+/* -----------------------------
+   LOAD DASHBOARD
+----------------------------- */
+
+async function loadDashboard() {
+
+  try {
+
+    const [
+      stats,
+      products
+    ] =
+      await Promise.all([
+        api("/api/stats"),
+        api("/api/products")
+      ]);
+
+    $("statProducts")
+      .textContent =
+      stats.products;
+
+    $("statChecks")
+      .textContent =
+      stats.checks;
+
+    $("statWarnings")
+      .textContent =
+      stats.warnings;
+
+    renderProducts(
+      products
+    );
+
+  } catch (error) {
+
+    console.error(
+      error
+    );
+
+    alert(
+      error.message
+    );
+  }
+}
+
+
+/* -----------------------------
+   RENDER PRODUCTS
+----------------------------- */
+
+function renderProducts(
+  products
+) {
+
+  const container =
+    $("productsList");
+
+  if (!products.length) {
+
+    container.innerHTML =
+      `
+      <div class="empty-state">
+        No products registered yet.
+      </div>
+      `;
 
     return;
   }
 
+  container.innerHTML =
+    products
+      .map(product => {
 
-  const me =
-    await api("/api/me");
+        const statusLabel =
+          product.status ===
+          "active"
+            ? "Disable"
+            : "Enable";
 
+        const nextStatus =
+          product.status ===
+          "active"
+            ? "disabled"
+            : "active";
 
-  if (!me.ok) {
+        return `
+          <div
+            class="product-card"
+            data-product-code="${escapeHtml(product.code)}"
+          >
 
-    localStorage.removeItem(
-      tokenKey
-    );
-
-    token = null;
-
-    return loadDash();
-  }
-
-
-  const b =
-    await me.json();
-
-
-  $("who").textContent =
-    `Signed in as ${b.name} (${b.email})`;
-
-
-  $("productForm")
-    .classList
-    .remove("hidden");
-
-
-  $("logout")
-    .classList
-    .remove("hidden");
+            <div
+              class="product-image-holder"
+              data-image-code="${escapeHtml(product.code)}"
+            >
+              <div class="product-image-placeholder">
+                No image
+              </div>
+            </div>
 
 
-  const [ps, st] =
-    await Promise.all([
+            <div class="product-info">
 
-      api("/api/products")
-        .then(r => r.json()),
+              <h4>
+                ${escapeHtml(
+                  product.productName
+                )}
+              </h4>
 
-      api("/api/stats")
-        .then(r => r.json())
+              <p>
+                <strong>Brand:</strong>
+                ${escapeHtml(
+                  product.brand
+                )}
+              </p>
 
-    ]);
+              <p>
+                <strong>Batch:</strong>
+                ${escapeHtml(
+                  product.batch || "—"
+                )}
+              </p>
 
-
-  $("count").textContent =
-    st.products;
-
-  $("verified").textContent =
-    st.checks;
-
-  $("warnings").textContent =
-    st.warnings;
-
-
-  /* =========================
-     PRODUCT LIST
-  ========================= */
-
-  $("products").innerHTML =
-    ps.length
-
-      ?
-
-      ps
-        .map(p => {
-
-          const status =
-            String(
-              p.status || "active"
-            ).toLowerCase();
-
-
-          const statusButton =
-            status === "disabled"
-
-              ?
-
-              `
-                <button
-                  class="button small"
-                  onclick="setStatus('${esc(p.code)}','active')"
-                >
-                  Enable
-                </button>
-              `
-
-              :
-
-              `
-                <button
-                  class="button small"
-                  onclick="setStatus('${esc(p.code)}','disabled')"
-                >
-                  Disable
-                </button>
-              `;
-
-
-          return `
-
-            <div class="product-row">
-
-              <div>
-
-                <b>
-                  ${esc(p.brand)}
-                </b>
-
-                —
-                
-                ${esc(p.productName)}
-
-                <div class="muted">
-
-                  ${esc(
-                    p.batch || "No batch"
+              <p>
+                <strong>Code:</strong>
+                <code>
+                  ${escapeHtml(
+                    product.code
                   )}
+                </code>
+              </p>
 
-                  •
+              <p>
+                <strong>Status:</strong>
+                ${escapeHtml(
+                  product.status
+                )}
+              </p>
 
-                  ${p.verificationCount}
-                  checks
-
-                  •
-
-                  ${esc(p.status)}
-
-                </div>
-
-              </div>
-
-
-              <div class="product-actions">
-
-                <button
-                  class="button small"
-                  onclick="makeQR('${esc(p.code)}')"
-                >
-                  QR
-                </button>
-
-
-                ${statusButton}
-
-
-                <button
-                  class="button small"
-                  onclick="deleteProduct('${esc(p.code)}')"
-                >
-                  Delete
-                </button>
-
-              </div>
+              <p>
+                <strong>Checks:</strong>
+                ${product.verificationCount}
+              </p>
 
             </div>
 
-          `;
 
-        })
-        .join("")
+            <div class="product-actions">
 
-      :
+              <button
+                class="button small"
+                onclick="makeQR('${escapeJs(product.code)}')"
+              >
+                QR
+              </button>
 
-      `
-        <p class="muted">
-          No products registered yet.
-        </p>
-      `;
+              <button
+                class="button small"
+                onclick="replaceProductImage('${escapeJs(product.code)}')"
+              >
+                Image
+              </button>
+
+              <button
+                class="button small"
+                onclick="setStatus('${escapeJs(product.code)}','${nextStatus}')"
+              >
+                ${statusLabel}
+              </button>
+
+              <button
+                class="button small danger"
+                onclick="deleteProduct('${escapeJs(product.code)}')"
+              >
+                Delete
+              </button>
+
+            </div>
+
+          </div>
+        `;
+      })
+      .join("");
+
+  products.forEach(
+    product => {
+
+      loadProductImage(
+        product.code
+      );
+    }
+  );
 }
 
 
-/* =========================
-   REGISTER BUSINESS
-========================= */
+/* -----------------------------
+   LOAD PRODUCT IMAGE
+----------------------------- */
 
-$("registerForm").addEventListener(
-  "submit",
-  async e => {
+async function loadProductImage(
+  code
+) {
 
-    e.preventDefault();
+  try {
 
-
-    const r =
-      await fetch(
-        "/api/register",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
-
-            name:
-              $("bizName").value,
-
-            email:
-              $("bizEmail").value,
-
-            password:
-              $("bizPassword").value
-
-          })
-        }
-      );
-
-
-    const d =
-      await r.json();
-
-
-    if (!r.ok)
-      return msg(
-        d.error,
-        true
-      );
-
-
-    token =
-      d.token;
-
-
-    localStorage.setItem(
-      tokenKey,
-      token
-    );
-
-
-    msg(
-      "Account created and signed in.",
-      false
-    );
-
-
-    e.target.reset();
-
-
-    loadDash();
-  }
-);
-
-
-/* =========================
-   LOGIN
-========================= */
-
-$("loginForm").addEventListener(
-  "submit",
-  async e => {
-
-    e.preventDefault();
-
-
-    const r =
-      await fetch(
-        "/api/login",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
-
-            email:
-              $("loginEmail").value,
-
-            password:
-              $("loginPassword").value
-
-          })
-        }
-      );
-
-
-    const d =
-      await r.json();
-
-
-    if (!r.ok)
-      return msg(
-        d.error,
-        true
-      );
-
-
-    token =
-      d.token;
-
-
-    localStorage.setItem(
-      tokenKey,
-      token
-    );
-
-
-    msg(
-      "Signed in successfully.",
-      false
-    );
-
-
-    e.target.reset();
-
-
-    loadDash();
-  }
-);
-
-
-/* =========================
-   MESSAGE
-========================= */
-
-function msg(t, error) {
-
-  const x =
-    $("authMsg");
-
-
-  x.className =
-    "result " +
-    (
-      error
-        ? "error"
-        : "success"
-    );
-
-
-  x.textContent =
-    t;
-}
-
-
-/* =========================
-   REGISTER PRODUCT
-========================= */
-
-$("productForm").addEventListener(
-  "submit",
-  async e => {
-
-    e.preventDefault();
-
-
-    const r =
-      await api(
-        "/api/products",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
-
-            brand:
-              $("brand").value,
-
-            productName:
-              $("productName").value,
-
-            batch:
-              $("batch").value
-
-          })
-        }
-      );
-
-
-    const p =
-      await r.json();
-
-
-    if (!r.ok)
-      return msg(
-        p.error,
-        true
-      );
-
-
-    const x =
-      $("newProduct");
-
-
-    x.className =
-      "result";
-
-
-    x.innerHTML =
-      `
-        <h3>
-          Product registered ✓
-        </h3>
-
-        <p>
-          Verification code:
-        </p>
-
-        <div class="code">
-          ${esc(p.code)}
-        </div>
-
-        <p class="muted">
-          Use the QR button in the dashboard
-          to generate a verification QR.
-        </p>
-      `;
-
-
-    e.target.reset();
-
-
-    loadDash();
-  }
-);
-
-
-/* =========================
-   GENERATE QR
-========================= */
-
-window.makeQR =
-  async code => {
-
-    const r =
+    const data =
       await api(
         "/api/products/" +
-        encodeURIComponent(code) +
-        "/qr"
+        encodeURIComponent(
+          code
+        ) +
+        "/image"
       );
 
-
-    const d =
-      await r.json();
-
-
-    if (!r.ok)
-      return msg(
-        d.error,
-        true
+    const holders =
+      document.querySelectorAll(
+        "[data-image-code]"
       );
 
+    let holder = null;
 
-    const x =
-      $("newProduct");
+    holders.forEach(
+      item => {
 
+        if (
+          item.dataset.imageCode ===
+          code
+        ) {
+          holder = item;
+        }
+      }
+    );
 
-    x.className =
-      "result";
+    if (!holder) {
+      return;
+    }
 
+    if (
+      data.imageData
+    ) {
 
-    x.innerHTML =
-      `
-        <h3>
-          QR for ${esc(code)}
-        </h3>
-
+      holder.innerHTML =
+        `
         <img
-          class="qr"
-          src="${d.data}"
-          alt="Verification QR"
+          src="${data.imageData}"
+          alt="Registered product"
+          class="product-image"
         >
+        `;
 
-        <p>
-          <a
-            href="${esc(d.data)}"
-            download="verifyit-${esc(code)}.png"
-          >
-            Save QR image
-          </a>
-        </p>
-      `;
+    } else {
+
+      holder.innerHTML =
+        `
+        <div class="product-image-placeholder">
+          No image
+        </div>
+        `;
+    }
+
+  } catch (error) {
+
+    console.error(
+      "Unable to load image:",
+      error
+    );
+  }
+}
+
+
+/* -----------------------------
+   REPLACE PRODUCT IMAGE
+----------------------------- */
+
+window.replaceProductImage =
+  async code => {
+
+    const input =
+      document.createElement(
+        "input"
+      );
+
+    input.type =
+      "file";
+
+    input.accept =
+      "image/jpeg,image/png,image/webp";
+
+    input.onchange =
+      async () => {
+
+        const file =
+          input.files?.[0];
+
+        if (!file) {
+          return;
+        }
+
+        try {
+
+          const imageData =
+            await compressImage(
+              file
+            );
+
+          await api(
+            "/api/products/" +
+            encodeURIComponent(
+              code
+            ) +
+            "/image",
+            {
+              method: "PATCH",
+
+              body: {
+                imageData
+              }
+            }
+          );
+
+          alert(
+            "Product image updated."
+          );
+
+          await loadDashboard();
+
+        } catch (error) {
+
+          alert(
+            error.message
+          );
+        }
+      };
+
+    input.click();
   };
 
 
-/* =========================
-   ENABLE / DISABLE PRODUCT
-========================= */
+/* -----------------------------
+   CHANGE STATUS
+----------------------------- */
 
 window.setStatus =
-  async (code, status) => {
+  async (
+    code,
+    status
+  ) => {
 
-    const action =
-      status === "disabled"
-        ? "disable"
-        : "enable";
+    try {
 
-
-    const confirmed =
-      confirm(
-        `Are you sure you want to ${action} this product?`
-      );
-
-
-    if (!confirmed)
-      return;
-
-
-    const r =
       await api(
         "/api/products/" +
-        encodeURIComponent(code) +
+        encodeURIComponent(
+          code
+        ) +
         "/status",
         {
           method: "PATCH",
 
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
+          body: {
             status
-          })
+          }
         }
       );
 
+      await loadDashboard();
 
-    const d =
-      await r.json();
+    } catch (error) {
 
-
-    if (!r.ok)
-      return msg(
-        d.error ||
-        "Unable to update product status.",
-        true
+      alert(
+        error.message
       );
-
-
-    loadDash();
+    }
   };
 
 
-/* =========================
+/* -----------------------------
    DELETE PRODUCT
-========================= */
+----------------------------- */
 
 window.deleteProduct =
   async code => {
 
     const confirmed =
       confirm(
-        "Delete this product permanently?\n\n" +
-        "This action cannot be undone."
+        "Delete this product permanently?"
       );
 
-
-    if (!confirmed)
+    if (!confirmed) {
       return;
+    }
 
+    try {
 
-    const r =
       await api(
         "/api/products/" +
-        encodeURIComponent(code),
+        encodeURIComponent(
+          code
+        ),
         {
           method: "DELETE"
         }
       );
 
+      await loadDashboard();
 
-    const d =
-      await r.json();
+    } catch (error) {
 
-
-    if (!r.ok) {
-
-      return msg(
-        d.error ||
-        "Unable to delete product.",
-        true
+      alert(
+        error.message
       );
     }
-
-
-    const x =
-      $("newProduct");
-
-
-    x.className =
-      "result success";
-
-
-    x.innerHTML =
-      `
-        <h3>
-          Product deleted ✓
-        </h3>
-
-        <p>
-          Product
-          ${esc(code)}
-          was removed successfully.
-        </p>
-      `;
-
-
-    await loadDash();
   };
 
 
-/* =========================
-   LOGOUT
-========================= */
+/* -----------------------------
+   GENERATE QR
+----------------------------- */
 
-$("logout").addEventListener(
-  "click",
-  () => {
+window.makeQR =
+  async code => {
 
-    localStorage.removeItem(
-      tokenKey
+    try {
+
+      const data =
+        await api(
+          "/api/products/" +
+          encodeURIComponent(
+            code
+          ) +
+          "/qr"
+        );
+
+      const popup =
+        window.open(
+          "",
+          "_blank"
+        );
+
+      if (!popup) {
+
+        alert(
+          "Please allow pop-ups for VerifyIt."
+        );
+
+        return;
+      }
+
+      popup.document.write(
+        `
+        <!doctype html>
+        <html>
+        <head>
+          <title>VerifyIt QR Code</title>
+
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              text-align: center;
+              padding: 30px;
+            }
+
+            img {
+              width: 500px;
+              max-width: 90vw;
+            }
+
+            button {
+              padding: 12px 20px;
+              margin-top: 20px;
+              cursor: pointer;
+            }
+          </style>
+        </head>
+
+        <body>
+
+          <h2>VerifyIt</h2>
+
+          <p>
+            ${escapeHtml(code)}
+          </p>
+
+          <img
+            src="${data.data}"
+            alt="VerifyIt QR Code"
+          >
+
+          <br>
+
+          <button
+            onclick="window.print()"
+          >
+            Print QR Code
+          </button>
+
+        </body>
+        </html>
+        `
+      );
+
+      popup.document.close();
+
+    } catch (error) {
+
+      alert(
+        error.message
+      );
+    }
+  };
+
+
+/* -----------------------------
+   VERIFY PRODUCT
+----------------------------- */
+
+$("verifyForm")
+  .addEventListener(
+    "submit",
+    async event => {
+
+      event.preventDefault();
+
+      const code =
+        $("verifyCode")
+          .value
+          .trim()
+          .toUpperCase();
+
+      if (!code) {
+        return;
+      }
+
+      const resultBox =
+        $("verifyResult");
+
+      resultBox.innerHTML =
+        `
+        <div class="verification-loading">
+          Checking product...
+        </div>
+        `;
+
+      try {
+
+        const data =
+          await api(
+            "/api/verify/" +
+            encodeURIComponent(
+              code
+            )
+          );
+
+        renderVerificationResult(
+          data
+        );
+
+      } catch (error) {
+
+        resultBox.innerHTML =
+          `
+          <div class="verification-error">
+            ${escapeHtml(
+              error.message
+            )}
+          </div>
+          `;
+      }
+    }
+  );
+
+
+/* -----------------------------
+   VERIFICATION RESULT
+----------------------------- */
+
+function renderVerificationResult(
+  data
+) {
+
+  const resultBox =
+    $("verifyResult");
+
+  if (
+    data.result ===
+    "not_verified"
+  ) {
+
+    resultBox.innerHTML =
+      `
+      <div class="verification-result not-verified">
+
+        <h3>
+          ✕ NOT VERIFIED
+        </h3>
+
+        <p>
+          ${escapeHtml(
+            data.message
+          )}
+        </p>
+
+      </div>
+      `;
+
+    return;
+  }
+
+
+  const product =
+    data.product;
+
+  let title =
+    "✓ VERIFIED";
+
+  if (
+    data.result ===
+    "warning"
+  ) {
+    title =
+      "⚠ WARNING";
+  }
+
+
+  const imageHtml =
+    product?.imageData
+      ? `
+        <div class="verified-product-image">
+          <img
+            src="${product.imageData}"
+            alt="Registered product"
+          >
+        </div>
+        `
+      : `
+        <div class="verified-product-no-image">
+          No product image registered
+        </div>
+        `;
+
+
+  resultBox.innerHTML =
+    `
+    <div
+      class="verification-result ${escapeHtml(
+        data.result
+      )}"
+    >
+
+      <h3>
+        ${title}
+      </h3>
+
+
+      ${imageHtml}
+
+
+      <div class="verified-product-details">
+
+        <h4>
+          ${escapeHtml(
+            product.productName
+          )}
+        </h4>
+
+        <p>
+          <strong>Brand:</strong>
+          ${escapeHtml(
+            product.brand
+          )}
+        </p>
+
+        <p>
+          <strong>Batch:</strong>
+          ${escapeHtml(
+            product.batch || "—"
+          )}
+        </p>
+
+        <p>
+          <strong>Verification code:</strong>
+          <code>
+            ${escapeHtml(
+              product.code
+            )}
+          </code>
+        </p>
+
+        <p>
+          ${escapeHtml(
+            data.message
+          )}
+        </p>
+
+      </div>
+
+    </div>
+    `;
+}
+
+
+/* -----------------------------
+   AUTO VERIFY FROM QR URL
+----------------------------- */
+
+function autoVerifyFromUrl() {
+
+  const params =
+    new URLSearchParams(
+      window.location.search
     );
 
-    token = null;
+  const code =
+    params.get("verify");
 
-    location.reload();
+  if (!code) {
+    return;
   }
-);
+
+  $("verifyCode")
+    .value =
+    code;
+
+  $("verifyForm")
+    .dispatchEvent(
+      new Event(
+        "submit",
+        {
+          bubbles: true,
+          cancelable: true
+        }
+      )
+    );
+
+  const verifySection =
+    $("verify");
+
+  if (verifySection) {
+
+    verifySection.scrollIntoView({
+      behavior: "smooth"
+    });
+  }
+}
 
 
-/* =========================
-   START APP
-========================= */
+/* -----------------------------
+   REFRESH
+----------------------------- */
 
-loadDash();
+$("refreshProducts")
+  .addEventListener(
+    "click",
+    loadDashboard
+  );
+
+
+/* -----------------------------
+   HTML ESCAPING
+----------------------------- */
+
+function escapeHtml(
+  value
+) {
+
+  return String(
+    value ?? ""
+  )
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+}
+
+
+function escapeJs(
+  value
+) {
+
+  return String(
+    value ?? ""
+  )
+    .replace(
+      /\\/g,
+      "\\\\"
+    )
+    .replace(
+      /'/g,
+      "\\'"
+    )
+    .replace(
+      /"/g,
+      '\\"'
+    );
+}
+
+
+/* -----------------------------
+   START
+----------------------------- */
+
+loadCurrentUser();
+
+autoVerifyFromUrl();
