@@ -1,22 +1,795 @@
-const $=id=>document.getElementById(id); const tokenKey="verifyit_token"; let token=localStorage.getItem(tokenKey);
-const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(url,opts={}){opts.headers={...(opts.headers||{}),...(token?{Authorization:"Bearer "+token}:{})};return fetch(url,opts)}
-async function verify(code){const r=await fetch('/api/verify/'+encodeURIComponent(code));return r.json()}
-function showResult(d){const b=$('result');b.className='result '+d.result; b.innerHTML=`<h3>${d.result==='authentic'?'✓ AUTHENTIC':d.result==='warning'?'⚠ WARNING':'✕ NOT VERIFIED'}</h3><p>${esc(d.message)}</p>`+(d.product?`<p><b>${esc(d.product.brand)}</b> — ${esc(d.product.productName)}<br>Code: <span class="code">${esc(d.product.code)}</span><br>Batch: ${esc(d.product.batch||'Not provided')}</p>`:'')}
-$('verifyForm').addEventListener('submit',async e=>{e.preventDefault();showResult(await verify($('verifyCode').value.trim()))});
-const qs=new URLSearchParams(location.search); if(qs.get("verify")){$('verifyCode').value=qs.get("verify");verify(qs.get("verify")).then(showResult)}
-async function loadDash(){
- if(!token){$('productForm').classList.add('hidden');$('logout').classList.add('hidden');$('who').textContent='Sign in to manage products.';return}
- const me=await api('/api/me'); if(!me.ok){localStorage.removeItem(tokenKey);token=null;return loadDash()} const b=await me.json();
- $('who').textContent=`Signed in as ${b.name} (${b.email})`;$('productForm').classList.remove('hidden');$('logout').classList.remove('hidden');
- const [ps,st]=await Promise.all([api('/api/products').then(r=>r.json()),api('/api/stats').then(r=>r.json())]);
- $('count').textContent=st.products;$('verified').textContent=st.checks;$('warnings').textContent=st.warnings;
- $('products').innerHTML=ps.length?ps.map(p=>`<div class="product-row"><div><b>${esc(p.brand)}</b> — ${esc(p.productName)}<div class="muted">${esc(p.batch||'No batch')} • ${p.verificationCount} checks • ${esc(p.status)}</div></div><div class="product-actions"><button class="button small" onclick="makeQR('${p.code}')">QR</button><button class="button small" onclick="setStatus('${p.code}','disabled')">Disable</button></div></div>`).join(''):'<p class="muted">No products registered yet.</p>';
+const $ = id => document.getElementById(id);
+
+const tokenKey = "verifyit_token";
+
+let token = localStorage.getItem(tokenKey);
+
+
+/* =========================
+   SECURITY / HTML ESCAPING
+========================= */
+
+const esc = s =>
+  String(s ?? "").replace(
+    /[&<>"']/g,
+    c => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[c])
+  );
+
+
+/* =========================
+   API HELPER
+========================= */
+
+async function api(url, opts = {}) {
+
+  opts.headers = {
+    ...(opts.headers || {}),
+    ...(token
+      ? { Authorization: "Bearer " + token }
+      : {})
+  };
+
+  return fetch(url, opts);
 }
-$('registerForm').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('bizName').value,email:$('bizEmail').value,password:$('bizPassword').value})});const d=await r.json();if(!r.ok)return msg(d.error,true);token=d.token;localStorage.setItem(tokenKey,token);msg('Account created and signed in.',false);e.target.reset();loadDash()});
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('loginEmail').value,password:$('loginPassword').value})});const d=await r.json();if(!r.ok)return msg(d.error,true);token=d.token;localStorage.setItem(tokenKey,token);msg('Signed in successfully.',false);e.target.reset();loadDash()});
-function msg(t,error){const x=$('authMsg');x.className='result '+(error?'error':'success');x.textContent=t}
-$('productForm').addEventListener('submit',async e=>{e.preventDefault();const r=await api('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand:$('brand').value,productName:$('productName').value,batch:$('batch').value})});const p=await r.json();if(!r.ok)return msg(p.error,true);const x=$('newProduct');x.className='result';x.innerHTML=`<h3>Product registered ✓</h3><p>Verification code:</p><div class="code">${esc(p.code)}</div><p class="muted">Use the QR button in the dashboard to generate a verification QR.</p>`;e.target.reset();loadDash()});
-window.makeQR=async code=>{const r=await api('/api/products/'+encodeURIComponent(code)+'/qr');const d=await r.json();if(!r.ok)return msg(d.error,true);const x=$('newProduct');x.className='result';x.innerHTML=`<h3>QR for ${esc(code)}</h3><img class="qr" src="${d.data}" alt="Verification QR"><p><a href="${esc(d.data)}" download="verifyit-${esc(code)}.png">Save QR image</a></p>`}
-window.setStatus=async(code,status)=>{await api('/api/products/'+encodeURIComponent(code)+'/status',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});loadDash()}
-$('logout').addEventListener('click',()=>{localStorage.removeItem(tokenKey);token=null;location.reload()});loadDash();
+
+
+/* =========================
+   CUSTOMER VERIFICATION
+========================= */
+
+async function verify(code) {
+
+  const r = await fetch(
+    "/api/verify/" + encodeURIComponent(code)
+  );
+
+  return r.json();
+}
+
+
+function showResult(d) {
+
+  const b = $("result");
+
+  b.className = "result " + d.result;
+
+  b.innerHTML =
+    `
+      <h3>
+        ${
+          d.result === "authentic"
+            ? "✓ AUTHENTIC"
+            : d.result === "warning"
+              ? "⚠ WARNING"
+              : "✕ NOT VERIFIED"
+        }
+      </h3>
+
+      <p>${esc(d.message)}</p>
+    `
+
+    +
+
+    (
+      d.product
+        ? `
+          <p>
+            <b>${esc(d.product.brand)}</b>
+            —
+            ${esc(d.product.productName)}
+            <br>
+
+            Code:
+            <span class="code">
+              ${esc(d.product.code)}
+            </span>
+
+            <br>
+
+            Batch:
+            ${esc(d.product.batch || "Not provided")}
+          </p>
+        `
+        : ""
+    );
+}
+
+
+$("verifyForm").addEventListener(
+  "submit",
+  async e => {
+
+    e.preventDefault();
+
+    showResult(
+      await verify(
+        $("verifyCode").value.trim()
+      )
+    );
+  }
+);
+
+
+/* =========================
+   QR VERIFICATION LINK
+========================= */
+
+const qs = new URLSearchParams(
+  location.search
+);
+
+if (qs.get("verify")) {
+
+  $("verifyCode").value =
+    qs.get("verify");
+
+  verify(
+    qs.get("verify")
+  ).then(showResult);
+}
+
+
+/* =========================
+   LOAD BUSINESS DASHBOARD
+========================= */
+
+async function loadDash() {
+
+  if (!token) {
+
+    $("productForm")
+      .classList
+      .add("hidden");
+
+    $("logout")
+      .classList
+      .add("hidden");
+
+    $("who").textContent =
+      "Sign in to manage products.";
+
+    return;
+  }
+
+
+  const me =
+    await api("/api/me");
+
+
+  if (!me.ok) {
+
+    localStorage.removeItem(
+      tokenKey
+    );
+
+    token = null;
+
+    return loadDash();
+  }
+
+
+  const b =
+    await me.json();
+
+
+  $("who").textContent =
+    `Signed in as ${b.name} (${b.email})`;
+
+
+  $("productForm")
+    .classList
+    .remove("hidden");
+
+
+  $("logout")
+    .classList
+    .remove("hidden");
+
+
+  const [ps, st] =
+    await Promise.all([
+
+      api("/api/products")
+        .then(r => r.json()),
+
+      api("/api/stats")
+        .then(r => r.json())
+
+    ]);
+
+
+  $("count").textContent =
+    st.products;
+
+  $("verified").textContent =
+    st.checks;
+
+  $("warnings").textContent =
+    st.warnings;
+
+
+  /* =========================
+     PRODUCT LIST
+  ========================= */
+
+  $("products").innerHTML =
+    ps.length
+
+      ?
+
+      ps
+        .map(p => {
+
+          const status =
+            String(
+              p.status || "active"
+            ).toLowerCase();
+
+
+          const statusButton =
+            status === "disabled"
+
+              ?
+
+              `
+                <button
+                  class="button small"
+                  onclick="setStatus('${esc(p.code)}','active')"
+                >
+                  Enable
+                </button>
+              `
+
+              :
+
+              `
+                <button
+                  class="button small"
+                  onclick="setStatus('${esc(p.code)}','disabled')"
+                >
+                  Disable
+                </button>
+              `;
+
+
+          return `
+
+            <div class="product-row">
+
+              <div>
+
+                <b>
+                  ${esc(p.brand)}
+                </b>
+
+                —
+                
+                ${esc(p.productName)}
+
+                <div class="muted">
+
+                  ${esc(
+                    p.batch || "No batch"
+                  )}
+
+                  •
+
+                  ${p.verificationCount}
+                  checks
+
+                  •
+
+                  ${esc(p.status)}
+
+                </div>
+
+              </div>
+
+
+              <div class="product-actions">
+
+                <button
+                  class="button small"
+                  onclick="makeQR('${esc(p.code)}')"
+                >
+                  QR
+                </button>
+
+
+                ${statusButton}
+
+
+                <button
+                  class="button small"
+                  onclick="deleteProduct('${esc(p.code)}')"
+                >
+                  Delete
+                </button>
+
+              </div>
+
+            </div>
+
+          `;
+
+        })
+        .join("")
+
+      :
+
+      `
+        <p class="muted">
+          No products registered yet.
+        </p>
+      `;
+}
+
+
+/* =========================
+   REGISTER BUSINESS
+========================= */
+
+$("registerForm").addEventListener(
+  "submit",
+  async e => {
+
+    e.preventDefault();
+
+
+    const r =
+      await fetch(
+        "/api/register",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            name:
+              $("bizName").value,
+
+            email:
+              $("bizEmail").value,
+
+            password:
+              $("bizPassword").value
+
+          })
+        }
+      );
+
+
+    const d =
+      await r.json();
+
+
+    if (!r.ok)
+      return msg(
+        d.error,
+        true
+      );
+
+
+    token =
+      d.token;
+
+
+    localStorage.setItem(
+      tokenKey,
+      token
+    );
+
+
+    msg(
+      "Account created and signed in.",
+      false
+    );
+
+
+    e.target.reset();
+
+
+    loadDash();
+  }
+);
+
+
+/* =========================
+   LOGIN
+========================= */
+
+$("loginForm").addEventListener(
+  "submit",
+  async e => {
+
+    e.preventDefault();
+
+
+    const r =
+      await fetch(
+        "/api/login",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            email:
+              $("loginEmail").value,
+
+            password:
+              $("loginPassword").value
+
+          })
+        }
+      );
+
+
+    const d =
+      await r.json();
+
+
+    if (!r.ok)
+      return msg(
+        d.error,
+        true
+      );
+
+
+    token =
+      d.token;
+
+
+    localStorage.setItem(
+      tokenKey,
+      token
+    );
+
+
+    msg(
+      "Signed in successfully.",
+      false
+    );
+
+
+    e.target.reset();
+
+
+    loadDash();
+  }
+);
+
+
+/* =========================
+   MESSAGE
+========================= */
+
+function msg(t, error) {
+
+  const x =
+    $("authMsg");
+
+
+  x.className =
+    "result " +
+    (
+      error
+        ? "error"
+        : "success"
+    );
+
+
+  x.textContent =
+    t;
+}
+
+
+/* =========================
+   REGISTER PRODUCT
+========================= */
+
+$("productForm").addEventListener(
+  "submit",
+  async e => {
+
+    e.preventDefault();
+
+
+    const r =
+      await api(
+        "/api/products",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            brand:
+              $("brand").value,
+
+            productName:
+              $("productName").value,
+
+            batch:
+              $("batch").value
+
+          })
+        }
+      );
+
+
+    const p =
+      await r.json();
+
+
+    if (!r.ok)
+      return msg(
+        p.error,
+        true
+      );
+
+
+    const x =
+      $("newProduct");
+
+
+    x.className =
+      "result";
+
+
+    x.innerHTML =
+      `
+        <h3>
+          Product registered ✓
+        </h3>
+
+        <p>
+          Verification code:
+        </p>
+
+        <div class="code">
+          ${esc(p.code)}
+        </div>
+
+        <p class="muted">
+          Use the QR button in the dashboard
+          to generate a verification QR.
+        </p>
+      `;
+
+
+    e.target.reset();
+
+
+    loadDash();
+  }
+);
+
+
+/* =========================
+   GENERATE QR
+========================= */
+
+window.makeQR =
+  async code => {
+
+    const r =
+      await api(
+        "/api/products/" +
+        encodeURIComponent(code) +
+        "/qr"
+      );
+
+
+    const d =
+      await r.json();
+
+
+    if (!r.ok)
+      return msg(
+        d.error,
+        true
+      );
+
+
+    const x =
+      $("newProduct");
+
+
+    x.className =
+      "result";
+
+
+    x.innerHTML =
+      `
+        <h3>
+          QR for ${esc(code)}
+        </h3>
+
+        <img
+          class="qr"
+          src="${d.data}"
+          alt="Verification QR"
+        >
+
+        <p>
+          <a
+            href="${esc(d.data)}"
+            download="verifyit-${esc(code)}.png"
+          >
+            Save QR image
+          </a>
+        </p>
+      `;
+  };
+
+
+/* =========================
+   ENABLE / DISABLE PRODUCT
+========================= */
+
+window.setStatus =
+  async (code, status) => {
+
+    const action =
+      status === "disabled"
+        ? "disable"
+        : "enable";
+
+
+    const confirmed =
+      confirm(
+        `Are you sure you want to ${action} this product?`
+      );
+
+
+    if (!confirmed)
+      return;
+
+
+    const r =
+      await api(
+        "/api/products/" +
+        encodeURIComponent(code) +
+        "/status",
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+            status
+          })
+        }
+      );
+
+
+    const d =
+      await r.json();
+
+
+    if (!r.ok)
+      return msg(
+        d.error ||
+        "Unable to update product status.",
+        true
+      );
+
+
+    loadDash();
+  };
+
+
+/* =========================
+   DELETE PRODUCT
+========================= */
+
+window.deleteProduct =
+  async code => {
+
+    const confirmed =
+      confirm(
+        "Delete this product permanently?\n\n" +
+        "This action cannot be undone."
+      );
+
+
+    if (!confirmed)
+      return;
+
+
+    const r =
+      await api(
+        "/api/products/" +
+        encodeURIComponent(code),
+        {
+          method: "DELETE"
+        }
+      );
+
+
+    const d =
+      await r.json();
+
+
+    if (!r.ok) {
+
+      return msg(
+        d.error ||
+        "Unable to delete product.",
+        true
+      );
+    }
+
+
+    const x =
+      $("newProduct");
+
+
+    x.className =
+      "result success";
+
+
+    x.innerHTML =
+      `
+        <h3>
+          Product deleted ✓
+        </h3>
+
+        <p>
+          Product
+          ${esc(code)}
+          was removed successfully.
+        </p>
+      `;
+
+
+    await loadDash();
+  };
+
+
+/* =========================
+   LOGOUT
+========================= */
+
+$("logout").addEventListener(
+  "click",
+  () => {
+
+    localStorage.removeItem(
+      tokenKey
+    );
+
+    token = null;
+
+    location.reload();
+  }
+);
+
+
+/* =========================
+   START APP
+========================= */
+
+loadDash();
