@@ -1,322 +1,518 @@
 <!doctype html>
+
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
 
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1"
-  >
+<meta
+name="description"
+content="VerifyIt helps brands give products a unique digital identity that customers can check by QR code or verification code."
 
-  <meta
-    name="description"
-    content="VerifyIt helps brands give products a unique digital identity that customers can check by QR code or verification code."
-  >
+>
 
   <title>VerifyIt — Product Verification</title>
 
-  <link
-    rel="stylesheet"
-    href="/style.css"
-  >
+  <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
 
-  <header class="site-header">
-    <div class="container header-inner">
-      <div>
-        <h1>VerifyIt</h1>
-        <p>Product Verification</p>
-      </div>
-    </div>
-  </header>
+<header>
 
-  <main class="container">
+  <div class="brand">
+    <div class="brand-mark">✓</div>
+    VerifyIt
+  </div>
 
-    <!-- VERIFY -->
+  <nav>
+    <a href="#verify">Verify</a>
+    <a href="#business">For Businesses</a>
+    <a href="#about">About</a>
+  </nav>
 
-    <section
-      id="verify"
-      class="card"
-    >
+</header>
 
-      <h2>Verify a Product</h2>
+<main>
 
-      <p>
-        Enter the product verification code below
-        to check whether it is registered.
-      </p>
+  <!-- HERO -->
 
-      <form id="verifyForm">
+  <section class="hero">
 
-        <input
-          id="verifyCode"
-          type="text"
-          placeholder="Enter verification code"
-          autocomplete="off"
-          required
-        >
+```
+<div>
 
-        <button
-          type="submit"
-          class="button"
-        >
-          Verify Product
-        </button>
+  <div class="pill">
+    PRODUCT AUTHENTICITY INFRASTRUCTURE
+  </div>
 
-      </form>
+  <h1>
+    Know what you're buying.
+  </h1>
 
-      <div id="verifyResult"></div>
+  <p>
+    VerifyIt gives products a unique digital identity
+    that customers can check using a simple verification code.
+  </p>
 
-    </section>
+  <div class="hero-actions">
 
+    <a href="#verify" class="button">
+      Verify a Product
+    </a>
 
-    <!-- BUSINESS -->
+    <a href="#business" class="text-link">
+      For businesses →
+    </a>
 
-    <section
-      id="business"
-      class="card"
-    >
+  </div>
 
-      <h2>Business Dashboard</h2>
+  <p class="disclaimer">
+    VerifyIt confirms whether a product code is registered
+    in the VerifyIt database. Registration does not by itself
+    guarantee product quality or safety.
+  </p>
 
-      <div id="authArea">
-
-        <div class="auth-grid">
-
-          <div>
-            <h3>Login</h3>
-
-            <form id="loginForm">
-
-              <input
-                id="loginEmail"
-                type="email"
-                placeholder="Email"
-                required
-              >
-
-              <input
-                id="loginPassword"
-                type="password"
-                placeholder="Password"
-                required
-              >
-
-              <button
-                type="submit"
-                class="button"
-              >
-                Login
-              </button>
-
-            </form>
-          </div>
+</div>
 
 
-          <div>
-            <h3>Create Business Account</h3>
+<div class="card hero-card">
 
-            <form id="registerForm">
+  <div class="scan-icon">
+    ✓
+  </div>
 
-              <input
-                id="registerName"
-                type="text"
-                placeholder="Business name"
-                required
-              >
+  <div class="mini-label">
+    LIVE VERIFICATION
+  </div>
 
-              <input
-                id="registerEmail"
-                type="email"
-                placeholder="Email"
-                required
-              >
+  <h3>
+    Check a product
+  </h3>
 
-              <input
-                id="registerPassword"
-                type="password"
-                placeholder="Password — 8+ characters"
-                minlength="8"
-                required
-              >
+  <p>
+    Enter the verification code found on a registered product.
+  </p>
 
-              <button
-                type="submit"
-                class="button"
-              >
-                Create Account
-              </button>
+  <div class="demo-code">
+    VERIFY-2026-001
+  </div>
 
-            </form>
-          </div>
+  <div class="status-chip">
+    ✓ Registered product
+  </div>
 
-        </div>
+</div>
+```
 
-      </div>
+  </section>
+
+  <!-- VERIFY -->
+
+  <section id="verify" class="section">
+
+```
+<div class="section-heading">
+
+  <div class="eyebrow">
+    CUSTOMER VERIFICATION
+  </div>
+
+  <h2>
+    Verify a Product
+  </h2>
+
+  <p>
+    Enter the product verification code below
+    to check whether it is registered.
+  </p>
+
+</div>
 
 
-      <!-- DASHBOARD -->
+<form id="verifyForm" class="form verify-form">
 
-      <div
-        id="dashboard"
-        hidden
+  <input
+    id="verifyCode"
+    type="text"
+    placeholder="Enter verification code"
+    autocomplete="off"
+    required
+  >
+
+  <button type="submit" class="button">
+    Verify Product
+  </button>
+
+</form>
+
+
+<div id="verifyResult"></div>
+```
+
+  </section>
+
+  <!-- FEATURES -->
+
+  <section class="section alt">
+
+```
+<div class="section-heading">
+
+  <div class="eyebrow">
+    HOW VERIFYIT WORKS
+  </div>
+
+  <h2>
+    A simple digital identity for products.
+  </h2>
+
+  <p>
+    Businesses register their products and customers
+    can independently check their authenticity status.
+  </p>
+
+</div>
+
+
+<div class="feature-grid">
+
+  <div class="feature-card">
+    <b>01</b>
+    <h3>Register</h3>
+    <p>
+      Businesses create a digital record for each product.
+    </p>
+  </div>
+
+  <div class="feature-card">
+    <b>02</b>
+    <h3>Identify</h3>
+    <p>
+      Each registered product receives a unique verification code.
+    </p>
+  </div>
+
+  <div class="feature-card">
+    <b>03</b>
+    <h3>Verify</h3>
+    <p>
+      Customers enter the code to check the product.
+    </p>
+  </div>
+
+  <div class="feature-card">
+    <b>04</b>
+    <h3>Trust</h3>
+    <p>
+      Registered product information can be displayed during verification.
+    </p>
+  </div>
+
+</div>
+```
+
+  </section>
+
+  <!-- BUSINESS -->
+
+  <section id="business" class="section">
+
+```
+<div class="section-heading">
+
+  <div class="eyebrow">
+    FOR BUSINESSES
+  </div>
+
+  <h2>
+    Give your products a digital identity.
+  </h2>
+
+  <p>
+    Create a business account to register products,
+    manage verification codes and monitor customer checks.
+  </p>
+
+</div>
+
+
+<!-- AUTH -->
+
+<div id="authArea" class="auth-grid">
+
+  <div class="card form-card">
+
+    <h3>
+      Login
+    </h3>
+
+    <form id="loginForm">
+
+      <input
+        id="loginEmail"
+        type="email"
+        placeholder="Email"
+        required
       >
 
-        <div class="dashboard-header">
+      <input
+        id="loginPassword"
+        type="password"
+        placeholder="Password"
+        required
+      >
 
-          <div>
-            <h3 id="businessName">
-              Dashboard
-            </h3>
+      <button type="submit" class="button">
+        Login
+      </button>
 
-            <p id="businessEmail"></p>
-          </div>
+    </form>
 
-          <button
-            id="logoutButton"
-            class="button small"
-            type="button"
-          >
-            Logout
-          </button>
-
-        </div>
+  </div>
 
 
-        <!-- STATS -->
+  <div class="card form-card">
 
-        <div class="stats-grid">
+    <h3>
+      Create Business Account
+    </h3>
 
-          <div class="stat">
-            <strong id="statProducts">0</strong>
-            <span>Products</span>
-          </div>
+    <form id="registerForm">
 
-          <div class="stat">
-            <strong id="statChecks">0</strong>
-            <span>Total checks</span>
-          </div>
+      <input
+        id="registerName"
+        type="text"
+        placeholder="Business name"
+        required
+      >
 
-          <div class="stat">
-            <strong id="statWarnings">0</strong>
-            <span>Warnings</span>
-          </div>
+      <input
+        id="registerEmail"
+        type="email"
+        placeholder="Email"
+        required
+      >
 
-        </div>
+      <input
+        id="registerPassword"
+        type="password"
+        placeholder="Password — 8+ characters"
+        minlength="8"
+        required
+      >
 
+      <button type="submit" class="button">
+        Create Account
+      </button>
 
-        <!-- REGISTER PRODUCT -->
+    </form>
 
-        <div class="dashboard-section">
+  </div>
 
-          <h3>Register Product</h3>
-
-          <form id="productForm">
-
-            <input
-              id="productBrand"
-              type="text"
-              placeholder="Brand"
-              required
-            >
-
-            <input
-              id="productName"
-              type="text"
-              placeholder="Product name"
-              required
-            >
-
-            <input
-              id="productBatch"
-              type="text"
-              placeholder="Batch / Lot number (optional)"
-            >
+</div>
 
 
-            <label class="image-upload">
+<!-- DASHBOARD -->
 
-              <span>
-                Actual product image (optional)
-              </span>
+<div id="dashboard" hidden>
 
-              <input
-                id="productImage"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-              >
+  <div class="dash-head">
 
-              <small>
-                Use a clear photo of the actual product.
-                VerifyIt will resize it automatically.
-              </small>
+    <div>
 
-            </label>
-
-
-            <div
-              id="imagePreview"
-              class="image-preview"
-              hidden
-            >
-              <img
-                id="productImagePreview"
-                alt="Product preview"
-              >
-            </div>
-
-
-            <button
-              type="submit"
-              class="button"
-            >
-              Register Product
-            </button>
-
-          </form>
-
-        </div>
-
-
-        <!-- PRODUCTS -->
-
-        <div class="dashboard-section">
-
-          <div class="section-heading">
-
-            <div>
-              <h3>Your Products</h3>
-            </div>
-
-            <button
-              id="refreshProducts"
-              class="button small"
-              type="button"
-            >
-              Refresh
-            </button>
-
-          </div>
-
-          <div id="productsList"></div>
-
-        </div>
-
+      <div class="eyebrow">
+        BUSINESS DASHBOARD
       </div>
 
-    </section>
+      <h2 id="businessName">
+        Dashboard
+      </h2>
 
-  </main>
+      <p id="businessEmail" class="muted"></p>
+
+    </div>
+
+    <button
+      id="logoutButton"
+      class="button secondary small"
+      type="button"
+    >
+      Logout
+    </button>
+
+  </div>
 
 
-  <footer>
-    VerifyIt V1.4 Pilot • Product verification infrastructure for brands
-  </footer>
+  <!-- STATS -->
+
+  <div class="stats">
+
+    <div>
+      <b id="statProducts">0</b>
+      <span>Products</span>
+    </div>
+
+    <div>
+      <b id="statChecks">0</b>
+      <span>Total checks</span>
+    </div>
+
+    <div>
+      <b id="statWarnings">0</b>
+      <span>Warnings</span>
+    </div>
+
+  </div>
 
 
-  <script src="/app.js?v=4"></script>
+  <!-- REGISTER PRODUCT -->
+
+  <div class="section-heading">
+
+    <div class="eyebrow">
+      PRODUCT MANAGEMENT
+    </div>
+
+    <h2>
+      Register Product
+    </h2>
+
+    <p>
+      Add a product and optionally upload a clear image
+      of the actual product.
+    </p>
+
+  </div>
+
+
+  <form id="productForm" class="card form-card">
+
+    <input
+      id="productBrand"
+      type="text"
+      placeholder="Brand"
+      required
+    >
+
+    <input
+      id="productName"
+      type="text"
+      placeholder="Product name"
+      required
+    >
+
+    <input
+      id="productBatch"
+      type="text"
+      placeholder="Batch / Lot number (optional)"
+    >
+
+
+    <label class="image-upload">
+
+      <span>
+        Actual product image (optional)
+      </span>
+
+      <input
+        id="productImage"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+      >
+
+      <small>
+        Use a clear photo of the actual product.
+        VerifyIt will resize it automatically.
+      </small>
+
+    </label>
+
+
+    <div
+      id="imagePreview"
+      class="image-preview"
+      hidden
+    >
+
+      <img
+        id="productImagePreview"
+        alt="Product preview"
+      >
+
+    </div>
+
+
+    <button type="submit" class="button">
+      Register Product
+    </button>
+
+  </form>
+
+
+  <!-- PRODUCTS -->
+
+  <div class="section-heading">
+
+    <div class="eyebrow">
+      REGISTERED PRODUCTS
+    </div>
+
+    <div class="dash-head" style="margin-top:8px">
+
+      <h2>
+        Your Products
+      </h2>
+
+      <button
+        id="refreshProducts"
+        class="button secondary small"
+        type="button"
+      >
+        Refresh
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <div id="productsList"></div>
+
+</div>
+```
+
+  </section>
+
+  <!-- ABOUT -->
+
+  <section id="about" class="section final-note">
+
+```
+<div class="eyebrow">
+  VERIFYIT
+</div>
+
+<h2>
+  Building trust between brands and customers.
+</h2>
+
+<p>
+  VerifyIt is designed to give physical products
+  a simple digital identity that customers can check
+  before making a purchase or accepting a product.
+</p>
+```
+
+  </section>
+
+</main>
+
+<footer>
+  VerifyIt V1.4 Pilot • Product verification infrastructure for brands
+</footer>
+
+<script src="/app.js?v=5"></script>
 
 </body>
 </html>
