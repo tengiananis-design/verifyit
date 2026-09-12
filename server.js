@@ -12,10 +12,6 @@ const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-/* =========================================================
-   CONFIGURATION
-========================================================= */
-
 const PORT = process.env.PORT || 3000;
 
 const JWT_SECRET =
@@ -29,16 +25,6 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-if (!process.env.VERIFYIT_OWNER_KEY) {
-  console.warn(
-    "WARNING: VERIFYIT_OWNER_KEY is not configured. Owner controls will remain unavailable."
-  );
-}
-
-/* =========================================================
-   DATABASE
-========================================================= */
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -46,19 +32,17 @@ const pool = new Pool({
   }
 });
 
-/* =========================================================
+/* -----------------------------
    DATABASE SETUP
-========================================================= */
+----------------------------- */
 
 async function initDatabase() {
+
   /*
     IMPORTANT:
-
-    Each SQL operation is executed separately.
-
-    PostgreSQL/pg does not allow the previous combination
-    of multiple commands plus a parameterized prepared
-    statement.
+    Each PostgreSQL command is executed separately.
+    This avoids:
+    "cannot insert multiple commands into a prepared statement"
   */
 
   await pool.query(`
@@ -108,9 +92,8 @@ async function initDatabase() {
   `);
 
   /*
-    ========================================================
-    VERIFYIT LOCK IN PROTOCOL TABLES
-    ========================================================
+    Persistent system settings.
+    This survives server restarts and redeployments.
   */
 
   await pool.query(`
@@ -120,6 +103,10 @@ async function initDatabase() {
       updated_at TEXT NOT NULL
     )
   `);
+
+  /*
+    Owner audit log.
+  */
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS owner_audit_log (
@@ -131,28 +118,23 @@ async function initDatabase() {
   `);
 
   /*
-    Create the default lockdown setting only if it
+    Create the default lockdown state only if it
     does not already exist.
 
     IMPORTANT:
-    ON CONFLICT DO NOTHING means an existing lockdown
-    state is never overwritten during a restart/deploy.
+    ON CONFLICT DO NOTHING means an existing
+    lockdown state is preserved.
   */
 
   await pool.query(
     `
       INSERT INTO system_settings
-        (
-          setting_name,
-          setting_value,
-          updated_at
-        )
-      VALUES
-        (
-          $1,
-          $2,
-          $3
-        )
+      (
+        setting_name,
+        setting_value,
+        updated_at
+      )
+      VALUES ($1, $2, $3)
       ON CONFLICT (setting_name)
       DO NOTHING
     `,
@@ -168,56 +150,53 @@ async function initDatabase() {
   );
 }
 
-/* =========================================================
-   GENERAL HELPERS
-========================================================= */
+/* -----------------------------
+   TIME
+----------------------------- */
 
 function now() {
   return new Date().toISOString();
 }
 
-/* =========================================================
-   LOCK IN PROTOCOL
-   GET CURRENT LOCKDOWN STATE
-========================================================= */
+/* -----------------------------
+   LOCKDOWN HELPERS
+----------------------------- */
 
 async function getLockdownState() {
-  const result = await pool.query(`
-    SELECT setting_value
-    FROM system_settings
-    WHERE setting_name = 'verifyit_lockdown'
-    LIMIT 1
-  `);
+
+  const result = await pool.query(
+    `
+      SELECT setting_value
+      FROM system_settings
+      WHERE setting_name = $1
+    `,
+    ["verifyit_lockdown"]
+  );
 
   if (!result.rows[0]) {
     throw new Error(
-      "VerifyIt lockdown setting does not exist."
+      "Lockdown state is unavailable."
     );
   }
 
-  return result.rows[0].setting_value === "true";
+  return (
+    result.rows[0].setting_value === "true"
+  );
 }
 
-/* =========================================================
-   LOCK IN PROTOCOL
-   SET LOCKDOWN STATE
-========================================================= */
 
 async function setLockdownState(locked) {
+
   await pool.query(
     `
       INSERT INTO system_settings
-        (
-          setting_name,
-          setting_value,
-          updated_at
-        )
-      VALUES
-        (
-          $1,
-          $2,
-          $3
-        )
+      (
+        setting_name,
+        setting_value,
+        updated_at
+      )
+      VALUES ($1, $2, $3)
+
       ON CONFLICT (setting_name)
       DO UPDATE SET
         setting_value = EXCLUDED.setting_value,
@@ -231,30 +210,23 @@ async function setLockdownState(locked) {
   );
 }
 
-/* =========================================================
-   LOCK IN PROTOCOL
-   OWNER AUDIT LOG
-========================================================= */
 
 async function writeOwnerAudit(
   action,
   result
 ) {
+
   try {
+
     await pool.query(
       `
         INSERT INTO owner_audit_log
-          (
-            action,
-            result,
-            created_at
-          )
-        VALUES
-          (
-            $1,
-            $2,
-            $3
-          )
+        (
+          action,
+          result,
+          created_at
+        )
+        VALUES ($1, $2, $3)
       `,
       [
         action,
@@ -262,34 +234,31 @@ async function writeOwnerAudit(
         now()
       ]
     );
+
   } catch (error) {
-    /*
-      Audit failure must never expose the owner key
-      or crash the application.
-    */
 
     console.error(
-      "Owner audit log failed:",
-      error.message
+      "Owner audit logging failed:",
+      error
     );
   }
 }
 
-/* =========================================================
-   LOCK IN PROTOCOL
-   SAFE OWNER KEY COMPARISON
-========================================================= */
+
+/* -----------------------------
+   OWNER KEY SECURITY
+----------------------------- */
 
 function safeOwnerKeyCompare(
   providedKey
 ) {
+
   if (!OWNER_KEY) {
     return false;
   }
 
   if (
-    typeof providedKey !== "string" ||
-    providedKey.length === 0
+    typeof providedKey !== "string"
   ) {
     return false;
   }
@@ -319,31 +288,25 @@ function safeOwnerKeyCompare(
   );
 }
 
-/* =========================================================
-   LOCK IN PROTOCOL
+
+/* -----------------------------
    OWNER AUTHENTICATION
-========================================================= */
+----------------------------- */
 
 function ownerAuth(
   req,
   res,
   next
 ) {
+
   if (!OWNER_KEY) {
+
     return res.status(503).json({
       success: false,
       error:
         "Owner controls are not configured."
     });
   }
-
-  /*
-    Owner key is supplied through a request header.
-
-    Example:
-
-    x-verifyit-owner-key: YOUR_SECRET
-  */
 
   const providedKey =
     req.headers[
@@ -355,6 +318,7 @@ function ownerAuth(
       providedKey
     )
   ) {
+
     writeOwnerAudit(
       "OWNER_AUTH",
       "FAILED"
@@ -362,7 +326,8 @@ function ownerAuth(
 
     return res.status(401).json({
       success: false,
-      error: "Unauthorized."
+      error:
+        "Owner authentication failed."
     });
   }
 
@@ -371,48 +336,55 @@ function ownerAuth(
   next();
 }
 
-/* =========================================================
-   LOCK IN PROTOCOL
-   SERVER-SIDE LOCKDOWN MIDDLEWARE
-========================================================= */
+
+/* -----------------------------
+   LOCKDOWN MIDDLEWARE
+----------------------------- */
 
 async function lockdownMiddleware(
   req,
   res,
   next
 ) {
-  /*
-    Owner requests are allowed.
 
-    The owner routes are registered before this
-    middleware, but this also protects against
-    future owner-authenticated routes.
+  /*
+    Owner-authenticated requests are
+    allowed through.
   */
 
   if (req.isVerifyItOwner) {
     return next();
   }
 
-  let locked;
-
   try {
-    locked =
+
+    const locked =
       await getLockdownState();
+
+    if (locked) {
+
+      return res.status(503).json({
+        success: false,
+        locked: true,
+        error:
+          "VerifyIt is currently under lockdown."
+      });
+    }
+
+    next();
+
   } catch (error) {
-    /*
-      FAIL-SAFE:
-
-      If the server cannot determine the lockdown
-      state, normal protected operations are blocked.
-
-      This prevents a database/settings failure from
-      accidentally opening VerifyIt.
-    */
 
     console.error(
-      "Unable to determine VerifyIt lockdown state:",
-      error.message
+      "Unable to determine lockdown state:",
+      error
     );
+
+    /*
+      FAIL SAFE:
+      If the system cannot determine whether
+      it is locked, protected operations are blocked.
+    */
 
     return res.status(503).json({
       success: false,
@@ -421,41 +393,30 @@ async function lockdownMiddleware(
         "VerifyIt is temporarily unavailable."
     });
   }
-
-  if (locked) {
-    return res.status(503).json({
-      success: false,
-      locked: true,
-      error:
-        "VerifyIt is currently under lockdown."
-    });
-  }
-
-  next();
 }
 
-/* =========================================================
-   PRODUCT CODE GENERATOR
-========================================================= */
+
+/* -----------------------------
+   CODE GENERATOR
+----------------------------- */
 
 async function makeCode() {
+
   let code;
 
   do {
+
     code = crypto
       .randomBytes(8)
       .toString("hex")
       .toUpperCase()
       .match(/.{1,4}/g)
       .join("-");
+
   } while (
     (
       await pool.query(
-        `
-          SELECT 1
-          FROM products
-          WHERE code = $1
-        `,
+        "SELECT 1 FROM products WHERE code = $1",
         [code]
       )
     ).rowCount
@@ -464,13 +425,15 @@ async function makeCode() {
   return code;
 }
 
-/* =========================================================
-   BUSINESS TOKEN
-========================================================= */
+
+/* -----------------------------
+   JWT
+----------------------------- */
 
 function tokenFor(
   business
 ) {
+
   return jwt.sign(
     {
       id: business.id,
@@ -483,16 +446,19 @@ function tokenFor(
   );
 }
 
-/* =========================================================
-   BUSINESS AUTHENTICATION
-========================================================= */
+
+/* -----------------------------
+   BUSINESS AUTH
+----------------------------- */
 
 function auth(
   req,
   res,
   next
 ) {
+
   try {
+
     const header =
       req.headers.authorization || "";
 
@@ -513,7 +479,9 @@ function auth(
       );
 
     next();
+
   } catch {
+
     res.status(401).json({
       error:
         "Please log in."
@@ -521,15 +489,18 @@ function auth(
   }
 }
 
-/* =========================================================
-   PUBLIC PRODUCT FORMAT
-========================================================= */
+
+/* -----------------------------
+   PUBLIC PRODUCT DATA
+----------------------------- */
 
 function publicProduct(
   product,
   includeImage = false
 ) {
+
   const result = {
+
     brand:
       product.brand,
 
@@ -555,6 +526,7 @@ function publicProduct(
   };
 
   if (includeImage) {
+
     result.imageData =
       product.image_data || "";
   }
@@ -562,13 +534,15 @@ function publicProduct(
   return result;
 }
 
-/* =========================================================
+
+/* -----------------------------
    IMAGE VALIDATION
-========================================================= */
+----------------------------- */
 
 function validImageData(
   imageData
 ) {
+
   if (!imageData) {
     return true;
   }
@@ -593,8 +567,6 @@ function validImageData(
 
   /*
     Keep the prototype reasonably small.
-
-    The frontend compresses images before sending them.
   */
 
   if (
@@ -607,9 +579,10 @@ function validImageData(
   return true;
 }
 
-/* =========================================================
+
+/* -----------------------------
    EXPRESS
-========================================================= */
+----------------------------- */
 
 app.use(
   express.json({
@@ -626,42 +599,56 @@ app.use(
   )
 );
 
-/* =========================================================
+
+/* -----------------------------
    HEALTH CHECK
-   ALWAYS AVAILABLE
-========================================================= */
+----------------------------- */
 
 app.get(
   "/api/health",
   async (_req, res) => {
+
     try {
+
       await pool.query(
         "SELECT 1"
       );
 
-      let locked = null;
+      let locked = false;
 
       try {
+
         locked =
           await getLockdownState();
+
       } catch {
-        locked = null;
+
+        locked = true;
       }
 
       res.json({
+
         ok: true,
-        service: "VerifyIt",
-        version: "1.5.0",
+
+        service:
+          "VerifyIt",
+
+        version:
+          "1.5.0",
+
         database:
           "postgresql",
+
         lockdown:
-          locked === null
-            ? "unknown"
-            : locked
+          locked
       });
+
     } catch {
+
       res.status(500).json({
+
         ok: false,
+
         error:
           "Database connection failed."
       });
@@ -669,62 +656,54 @@ app.get(
   }
 );
 
-/* =========================================================
-   OWNER — LOCKDOWN STATUS
-========================================================= */
+
+/* -----------------------------
+   OWNER STATUS
+----------------------------- */
 
 app.get(
   "/api/owner/lockdown-status",
   ownerAuth,
   async (_req, res) => {
+
     try {
+
       const locked =
         await getLockdownState();
 
       res.json({
+
         success: true,
+
         locked
       });
+
     } catch (error) {
-      console.error(
-        "Owner status error:",
-        error
-      );
+
+      console.error(error);
 
       res.status(503).json({
+
         success: false,
+
         error:
-          "Unable to read lockdown state."
+          "Unable to determine lockdown state."
       });
     }
   }
 );
 
-/* =========================================================
-   OWNER — ACTIVATE LOCKDOWN
-========================================================= */
+
+/* -----------------------------
+   OWNER LOCK
+----------------------------- */
 
 app.post(
   "/api/owner/lockdown",
   ownerAuth,
   async (_req, res) => {
+
     try {
-      const currentState =
-        await getLockdownState();
-
-      if (currentState) {
-        await writeOwnerAudit(
-          "LOCKDOWN",
-          "ALREADY_LOCKED"
-        );
-
-        return res.json({
-          success: true,
-          locked: true,
-          message:
-            "VerifyIt is already under lockdown."
-        });
-      }
 
       await setLockdownState(
         true
@@ -732,20 +711,22 @@ app.post(
 
       await writeOwnerAudit(
         "LOCKDOWN",
-        "ACTIVATED"
+        "SUCCESS"
       );
 
       res.json({
+
         success: true,
+
         locked: true,
+
         message:
           "VerifyIt lockdown activated."
       });
+
     } catch (error) {
-      console.error(
-        "Lockdown activation failed:",
-        error
-      );
+
+      console.error(error);
 
       await writeOwnerAudit(
         "LOCKDOWN",
@@ -753,7 +734,9 @@ app.post(
       );
 
       res.status(500).json({
+
         success: false,
+
         error:
           "Unable to activate lockdown."
       });
@@ -761,31 +744,17 @@ app.post(
   }
 );
 
-/* =========================================================
-   OWNER — RESTORE VERIFYIT
-========================================================= */
+
+/* -----------------------------
+   OWNER UNLOCK
+----------------------------- */
 
 app.post(
   "/api/owner/unlock",
   ownerAuth,
   async (_req, res) => {
+
     try {
-      const currentState =
-        await getLockdownState();
-
-      if (!currentState) {
-        await writeOwnerAudit(
-          "UNLOCK",
-          "ALREADY_UNLOCKED"
-        );
-
-        return res.json({
-          success: true,
-          locked: false,
-          message:
-            "VerifyIt is already operational."
-        });
-      }
 
       await setLockdownState(
         false
@@ -793,20 +762,22 @@ app.post(
 
       await writeOwnerAudit(
         "UNLOCK",
-        "DEACTIVATED"
+        "SUCCESS"
       );
 
       res.json({
+
         success: true,
+
         locked: false,
+
         message:
-          "VerifyIt restored to normal operation."
+          "VerifyIt lockdown deactivated."
       });
+
     } catch (error) {
-      console.error(
-        "Unlock failed:",
-        error
-      );
+
+      console.error(error);
 
       await writeOwnerAudit(
         "UNLOCK",
@@ -814,48 +785,58 @@ app.post(
       );
 
       res.status(500).json({
+
         success: false,
+
         error:
-          "Unable to restore VerifyIt."
+          "Unable to deactivate lockdown."
       });
     }
   }
 );
 
-/* =========================================================
-   OWNER — AUDIT LOG
-========================================================= */
+
+/* -----------------------------
+   OWNER AUDIT LOG
+----------------------------- */
 
 app.get(
   "/api/owner/audit-log",
   ownerAuth,
   async (_req, res) => {
+
     try {
+
       const result =
-        await pool.query(`
-          SELECT
-            id,
-            action,
-            result,
-            created_at
-          FROM owner_audit_log
-          ORDER BY id DESC
-          LIMIT 100
-        `);
+        await pool.query(
+          `
+            SELECT
+              id,
+              action,
+              result,
+              created_at
+            FROM owner_audit_log
+            ORDER BY id DESC
+            LIMIT 100
+          `
+        );
 
       res.json({
+
         success: true,
+
         logs:
           result.rows
       });
+
     } catch (error) {
-      console.error(
-        "Audit log error:",
-        error
-      );
+
+      console.error(error);
 
       res.status(500).json({
+
         success: false,
+
         error:
           "Unable to load audit log."
       });
@@ -863,39 +844,25 @@ app.get(
   }
 );
 
+
 /* =========================================================
-   SERVER-SIDE LOCKDOWN STARTS HERE
-=========================================================
-
-   Everything below this point is protected by
-   the Lock In Protocol.
-
-   When lockdown = true:
-
-   - Registration blocked
-   - Login blocked
-   - Business APIs blocked
-   - Product APIs blocked
-   - Product image APIs blocked
-   - QR APIs blocked
-   - Public verification blocked
-   - Statistics blocked
-
-   Owner routes above remain available.
-========================================================= */
+   LOCKDOWN PROTECTION
+   ========================================================= */
 
 app.use(
   "/api",
   lockdownMiddleware
 );
 
-/* =========================================================
+
+/* -----------------------------
    BUSINESS REGISTRATION
-========================================================= */
+----------------------------- */
 
 app.post(
   "/api/register",
   async (req, res) => {
+
     const {
       name,
       email,
@@ -908,13 +875,16 @@ app.post(
       !password ||
       password.length < 8
     ) {
+
       return res.status(400).json({
+
         error:
           "Name, email and a password of at least 8 characters are required."
       });
     }
 
     try {
+
       const hash =
         await bcrypt.hash(
           password,
@@ -932,16 +902,8 @@ app.post(
               created_at
             )
             VALUES
-            (
-              $1,
-              $2,
-              $3,
-              $4
-            )
-            RETURNING
-              id,
-              name,
-              email
+            ($1, $2, $3, $4)
+            RETURNING id, name, email
           `,
           [
             String(name)
@@ -961,17 +923,24 @@ app.post(
         result.rows[0];
 
       res.status(201).json({
+
         token:
-          tokenFor(business),
+          tokenFor(
+            business
+          ),
 
         business
       });
+
     } catch (error) {
+
       if (
         error.code ===
         "23505"
       ) {
+
         return res.status(409).json({
+
           error:
             "That email is already registered."
         });
@@ -980,6 +949,7 @@ app.post(
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to create account."
       });
@@ -987,19 +957,22 @@ app.post(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    BUSINESS LOGIN
-========================================================= */
+----------------------------- */
 
 app.post(
   "/api/login",
   async (req, res) => {
+
     const {
       email,
       password
     } = req.body || {};
 
     try {
+
       const result =
         await pool.query(
           `
@@ -1008,9 +981,7 @@ app.post(
             WHERE email = $1
           `,
           [
-            String(
-              email || ""
-            )
+            String(email || "")
               .trim()
               .toLowerCase()
           ]
@@ -1021,26 +992,28 @@ app.post(
 
       if (
         !business ||
-        !(
-          await bcrypt.compare(
-            String(
-              password || ""
-            ),
-            business.password_hash
-          )
-        )
+        !(await bcrypt.compare(
+          String(password || ""),
+          business.password_hash
+        ))
       ) {
+
         return res.status(401).json({
+
           error:
             "Invalid email or password."
         });
       }
 
       res.json({
+
         token:
-          tokenFor(business),
+          tokenFor(
+            business
+          ),
 
         business: {
+
           id:
             business.id,
 
@@ -1051,10 +1024,13 @@ app.post(
             business.email
         }
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to log in."
       });
@@ -1062,15 +1038,18 @@ app.post(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    CURRENT BUSINESS
-========================================================= */
+----------------------------- */
 
 app.get(
   "/api/me",
   auth,
   async (req, res) => {
+
     try {
+
       const result =
         await pool.query(
           `
@@ -1087,10 +1066,10 @@ app.get(
           ]
         );
 
-      if (
-        !result.rows[0]
-      ) {
+      if (!result.rows[0]) {
+
         return res.status(404).json({
+
           error:
             "Business not found."
         });
@@ -1099,10 +1078,13 @@ app.get(
       res.json(
         result.rows[0]
       );
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to load account."
       });
@@ -1110,14 +1092,16 @@ app.get(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    CREATE PRODUCT
-========================================================= */
+----------------------------- */
 
 app.post(
   "/api/products",
   auth,
   async (req, res) => {
+
     const {
       brand,
       productName,
@@ -1129,7 +1113,9 @@ app.post(
       !brand ||
       !productName
     ) {
+
       return res.status(400).json({
+
         error:
           "Brand and product name are required."
       });
@@ -1140,13 +1126,16 @@ app.post(
         imageData
       )
     ) {
+
       return res.status(400).json({
+
         error:
           "Invalid or oversized product image."
       });
     }
 
     try {
+
       const code =
         await makeCode();
 
@@ -1167,15 +1156,7 @@ app.post(
               image_data
             )
             VALUES
-            (
-              $1,
-              $2,
-              $3,
-              $4,
-              $5,
-              $6,
-              $7
-            )
+            ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
           `,
           [
@@ -1184,13 +1165,11 @@ app.post(
             String(brand)
               .trim(),
 
-            String(
-              productName
-            ).trim(),
+            String(productName)
+              .trim(),
 
-            String(
-              batch || ""
-            ).trim(),
+            String(batch || "")
+              .trim(),
 
             code,
 
@@ -1203,15 +1182,20 @@ app.post(
         );
 
       res.status(201).json(
+
         publicProduct(
           result.rows[0],
           true
         )
+
       );
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to register product."
       });
@@ -1219,15 +1203,18 @@ app.post(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    LIST PRODUCTS
-========================================================= */
+----------------------------- */
 
 app.get(
   "/api/products",
   auth,
   async (req, res) => {
+
     try {
+
       const result =
         await pool.query(
           `
@@ -1242,6 +1229,7 @@ app.get(
         );
 
       res.json(
+
         result.rows.map(
           product =>
             publicProduct(
@@ -1249,11 +1237,15 @@ app.get(
               false
             )
         )
+
       );
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to load products."
       });
@@ -1261,14 +1253,16 @@ app.get(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    GET PRODUCT IMAGE
-========================================================= */
+----------------------------- */
 
 app.get(
   "/api/products/:code/image",
   auth,
   async (req, res) => {
+
     const code =
       String(
         req.params.code || ""
@@ -1277,6 +1271,7 @@ app.get(
         .toUpperCase();
 
     try {
+
       const result =
         await pool.query(
           `
@@ -1295,21 +1290,26 @@ app.get(
         result.rows[0];
 
       if (!product) {
+
         return res.status(404).json({
+
           error:
             "Product not found."
         });
       }
 
       res.json({
+
         imageData:
-          product.image_data ||
-          ""
+          product.image_data || ""
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to load product image."
       });
@@ -1317,14 +1317,16 @@ app.get(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    REPLACE PRODUCT IMAGE
-========================================================= */
+----------------------------- */
 
 app.patch(
   "/api/products/:code/image",
   auth,
   async (req, res) => {
+
     const code =
       String(
         req.params.code || ""
@@ -1341,13 +1343,16 @@ app.patch(
         imageData
       )
     ) {
+
       return res.status(400).json({
+
         error:
           "Invalid or oversized product image."
       });
     }
 
     try {
+
       const result =
         await pool.query(
           `
@@ -1368,16 +1373,17 @@ app.patch(
           ]
         );
 
-      if (
-        !result.rowCount
-      ) {
+      if (!result.rowCount) {
+
         return res.status(404).json({
+
           error:
             "Product not found."
         });
       }
 
       res.json({
+
         ok: true,
 
         product:
@@ -1386,10 +1392,13 @@ app.patch(
             true
           )
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to update product image."
       });
@@ -1397,14 +1406,16 @@ app.patch(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    DELETE PRODUCT
-========================================================= */
+----------------------------- */
 
 app.delete(
   "/api/products/:code",
   auth,
   async (req, res) => {
+
     const code =
       String(
         req.params.code || ""
@@ -1413,6 +1424,7 @@ app.delete(
         .toUpperCase();
 
     try {
+
       const result =
         await pool.query(
           `
@@ -1427,25 +1439,29 @@ app.delete(
           ]
         );
 
-      if (
-        !result.rowCount
-      ) {
+      if (!result.rowCount) {
+
         return res.status(404).json({
+
           error:
             "Product not found."
         });
       }
 
       res.json({
+
         ok: true,
 
         message:
           "Product deleted."
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to delete product."
       });
@@ -1453,14 +1469,16 @@ app.delete(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    CHANGE PRODUCT STATUS
-========================================================= */
+----------------------------- */
 
 app.patch(
   "/api/products/:code/status",
   auth,
   async (req, res) => {
+
     const status =
       req.body?.status;
 
@@ -1471,13 +1489,16 @@ app.patch(
         "recalled"
       ].includes(status)
     ) {
+
       return res.status(400).json({
+
         error:
           "Invalid status."
       });
     }
 
     try {
+
       const result =
         await pool.query(
           `
@@ -1488,29 +1509,31 @@ app.patch(
           `,
           [
             status,
-
             req.params.code,
-
             req.business.id
           ]
         );
 
-      if (
-        !result.rowCount
-      ) {
+      if (!result.rowCount) {
+
         return res.status(404).json({
+
           error:
             "Product not found."
         });
       }
 
       res.json({
+
         ok: true
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to update product."
       });
@@ -1518,15 +1541,18 @@ app.patch(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    GENERATE QR CODE
-========================================================= */
+----------------------------- */
 
 app.get(
   "/api/products/:code/qr",
   auth,
   async (req, res) => {
+
     try {
+
       const result =
         await pool.query(
           `
@@ -1537,7 +1563,6 @@ app.get(
           `,
           [
             req.params.code,
-
             req.business.id
           ]
         );
@@ -1546,7 +1571,9 @@ app.get(
         result.rows[0];
 
       if (!product) {
+
         return res.status(404).json({
+
           error:
             "Product not found."
         });
@@ -1571,15 +1598,19 @@ app.get(
         );
 
       res.json({
+
         url:
           verifyUrl,
 
         data
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to generate QR code."
       });
@@ -1587,13 +1618,15 @@ app.get(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    PUBLIC PRODUCT VERIFICATION
-========================================================= */
+----------------------------- */
 
 app.get(
   "/api/verify/:code",
   async (req, res) => {
+
     const code =
       String(
         req.params.code || ""
@@ -1602,6 +1635,7 @@ app.get(
         .toUpperCase();
 
     try {
+
       const result =
         await pool.query(
           `
@@ -1622,6 +1656,7 @@ app.get(
       */
 
       if (!product) {
+
         await pool.query(
           `
             INSERT INTO verifications
@@ -1631,22 +1666,17 @@ app.get(
               checked_at
             )
             VALUES
-            (
-              $1,
-              $2,
-              $3
-            )
+            ($1, $2, $3)
           `,
           [
             code,
-
             "not_verified",
-
             now()
           ]
         );
 
         return res.json({
+
           result:
             "not_verified",
 
@@ -1665,16 +1695,21 @@ app.get(
         product.status !==
         "active"
       ) {
+
         verificationResult =
           "warning";
+
       } else if (
         Number(
           product.verification_count
         ) >= 5
       ) {
+
         verificationResult =
           "warning";
+
       } else {
+
         verificationResult =
           "authentic";
       }
@@ -1685,15 +1720,20 @@ app.get(
         product.status !==
         "active"
       ) {
+
         message =
           `This product record is marked ${product.status}.`;
+
       } else if (
         verificationResult ===
         "warning"
       ) {
+
         message =
           "This code is registered, but it has unusually high verification activity. Check the item with the seller or manufacturer.";
+
       } else {
+
         message =
           "The code matches a registered product record.";
       }
@@ -1728,20 +1768,12 @@ app.get(
             checked_at
           )
           VALUES
-          (
-            $1,
-            $2,
-            $3,
-            $4
-          )
+          ($1, $2, $3, $4)
         `,
         [
           product.id,
-
           code,
-
           verificationResult,
-
           now()
         ]
       );
@@ -1763,6 +1795,7 @@ app.get(
         );
 
       res.json({
+
         result:
           verificationResult,
 
@@ -1774,10 +1807,13 @@ app.get(
 
         message
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to verify product."
       });
@@ -1785,15 +1821,18 @@ app.get(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    BUSINESS STATISTICS
-========================================================= */
+----------------------------- */
 
 app.get(
   "/api/stats",
   auth,
   async (req, res) => {
+
     try {
+
       const products =
         await pool.query(
           `
@@ -1836,6 +1875,7 @@ app.get(
         );
 
       res.json({
+
         products:
           Number(
             products.rows[0].count
@@ -1851,10 +1891,13 @@ app.get(
             warnings.rows[0].count
           )
       });
+
     } catch (error) {
+
       console.error(error);
 
       res.status(500).json({
+
         error:
           "Unable to load statistics."
       });
@@ -1862,13 +1905,405 @@ app.get(
   }
 );
 
+
 /* =========================================================
+   OWNER CONTROL PAGE
+   ========================================================= */
+
+app.get(
+  "/owner",
+  (_req, res) => {
+
+    res.type("html").send(`
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>
+    VerifyIt Owner Control
+  </title>
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+
+      margin: 0;
+
+      padding: 20px;
+
+      min-height: 100vh;
+
+      background: #111;
+
+      color: #fff;
+
+      font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+    }
+
+    .box {
+
+      width: 100%;
+
+      max-width: 500px;
+
+      margin:
+        40px auto;
+
+      padding: 25px;
+
+      background: #1c1c1c;
+
+      border-radius: 16px;
+
+      box-shadow:
+        0 0 25px
+        rgba(0, 0, 0, 0.4);
+    }
+
+    h1 {
+
+      margin-top: 0;
+
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+
+      color: #aaa;
+
+      margin-bottom: 25px;
+    }
+
+    .status {
+
+      padding: 18px;
+
+      margin:
+        20px 0;
+
+      border-radius: 10px;
+
+      background: #292929;
+
+      font-weight: bold;
+
+      text-align: center;
+    }
+
+    input {
+
+      width: 100%;
+
+      padding: 14px;
+
+      margin-bottom: 15px;
+
+      border-radius: 8px;
+
+      border:
+        1px solid #555;
+
+      background: #111;
+
+      color: white;
+
+      font-size: 16px;
+    }
+
+    button {
+
+      width: 100%;
+
+      padding: 15px;
+
+      margin-top: 10px;
+
+      border: 0;
+
+      border-radius: 8px;
+
+      font-size: 16px;
+
+      font-weight: bold;
+
+      cursor: pointer;
+    }
+
+    button:active {
+
+      transform:
+        scale(0.98);
+    }
+
+    .lock {
+
+      background: #b00020;
+
+      color: white;
+    }
+
+    .unlock {
+
+      background: #087f23;
+
+      color: white;
+    }
+
+    .refresh {
+
+      background: #444;
+
+      color: white;
+    }
+
+    #message {
+
+      margin-top: 20px;
+
+      padding: 10px;
+
+      white-space:
+        pre-wrap;
+
+      line-height: 1.5;
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+  <div class="box">
+
+    <h1>
+      VerifyIt Owner Control
+    </h1>
+
+    <div class="subtitle">
+      Emergency system control
+    </div>
+
+    <div
+      id="status"
+      class="status"
+    >
+      Checking system status...
+    </div>
+
+    <input
+      id="ownerKey"
+      type="password"
+      placeholder="Enter owner key"
+      autocomplete="off"
+    >
+
+    <button
+      class="lock"
+      onclick="changeLock(true)"
+    >
+      🔒 LOCK VERIFYIT
+    </button>
+
+    <button
+      class="unlock"
+      onclick="changeLock(false)"
+    >
+      🔓 UNLOCK VERIFYIT
+    </button>
+
+    <button
+      class="refresh"
+      onclick="loadStatus()"
+    >
+      🔄 REFRESH STATUS
+    </button>
+
+    <div
+      id="message"
+    ></div>
+
+  </div>
+
+
+<script>
+
+async function loadStatus() {
+
+  const status =
+    document.getElementById(
+      "status"
+    );
+
+  const message =
+    document.getElementById(
+      "message"
+    );
+
+  status.textContent =
+    "Checking system status...";
+
+  message.textContent =
+    "";
+
+  try {
+
+    const response =
+      await fetch(
+        "/api/owner/lockdown-status"
+      );
+
+    const data =
+      await response.json();
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error ||
+        "Unable to read status."
+      );
+    }
+
+    if (data.locked) {
+
+      status.textContent =
+        "🔒 VERIFYIT IS LOCKED";
+
+    } else {
+
+      status.textContent =
+        "🟢 VERIFYIT IS UNLOCKED";
+    }
+
+  } catch (error) {
+
+    status.textContent =
+      "⚠️ Unable to read status.";
+
+    message.textContent =
+      error.message;
+  }
+}
+
+
+async function changeLock(
+  locked
+) {
+
+  const keyInput =
+    document.getElementById(
+      "ownerKey"
+    );
+
+  const message =
+    document.getElementById(
+      "message"
+    );
+
+  const key =
+    keyInput.value;
+
+  if (!key) {
+
+    message.textContent =
+      "Enter your owner key first.";
+
+    return;
+  }
+
+  const endpoint =
+    locked
+      ? "/api/owner/lockdown"
+      : "/api/owner/unlock";
+
+  message.textContent =
+    locked
+      ? "Activating lockdown..."
+      : "Restoring VerifyIt...";
+
+  try {
+
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: "POST",
+
+          headers: {
+            "x-verifyit-owner-key":
+              key
+          }
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error ||
+        "Request failed."
+      );
+    }
+
+    message.textContent =
+      locked
+        ? "🔒 Lockdown activated successfully."
+        : "🔓 VerifyIt restored successfully.";
+
+    keyInput.value =
+      "";
+
+    await loadStatus();
+
+  } catch (error) {
+
+    message.textContent =
+      "⚠️ " +
+      error.message;
+  }
+}
+
+
+loadStatus();
+
+</script>
+
+</body>
+
+</html>
+
+    `);
+  }
+);
+
+
+/* -----------------------------
    FRONTEND
-========================================================= */
+----------------------------- */
 
 app.get(
   "*",
   (_req, res) => {
+
     res.sendFile(
       path.join(
         __dirname,
@@ -1879,22 +2314,37 @@ app.get(
   }
 );
 
-/* =========================================================
+
+/* -----------------------------
    START SERVER
-========================================================= */
+----------------------------- */
 
 initDatabase()
+
   .then(() => {
+
     app.listen(
       PORT,
       () => {
+
+        if (!OWNER_KEY) {
+
+          console.warn(
+            "WARNING: VERIFYIT_OWNER_KEY is not configured. Owner controls will remain unavailable."
+          );
+
+        }
+
         console.log(
           `VerifyIt V1.5 with Lock In Protocol running on port ${PORT}`
         );
       }
     );
+
   })
+
   .catch((error) => {
+
     console.error(
       "Database initialization failed:",
       error
