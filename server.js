@@ -51,6 +51,16 @@ const pool = new Pool({
 ========================================================= */
 
 async function initDatabase() {
+  /*
+    IMPORTANT:
+
+    Each SQL operation is executed separately.
+
+    PostgreSQL/pg does not allow the previous combination
+    of multiple commands plus a parameterized prepared
+    statement.
+  */
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS businesses (
       id SERIAL PRIMARY KEY,
@@ -58,8 +68,10 @@ async function initDatabase() {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       created_at TEXT NOT NULL
-    );
+    )
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
       business_id INTEGER NOT NULL,
@@ -74,8 +86,10 @@ async function initDatabase() {
       FOREIGN KEY (business_id)
         REFERENCES businesses(id)
         ON DELETE CASCADE
-    );
+    )
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS verifications (
       id SERIAL PRIMARY KEY,
       product_id INTEGER,
@@ -85,46 +99,73 @@ async function initDatabase() {
       FOREIGN KEY (product_id)
         REFERENCES products(id)
         ON DELETE SET NULL
-    );
+    )
+  `);
 
+  await pool.query(`
     ALTER TABLE products
-    ADD COLUMN IF NOT EXISTS image_data TEXT DEFAULT '';
+    ADD COLUMN IF NOT EXISTS image_data TEXT DEFAULT ''
+  `);
 
-    /*
-      ======================================================
-      VERIFYIT LOCK IN PROTOCOL
-      ======================================================
-    */
+  /*
+    ========================================================
+    VERIFYIT LOCK IN PROTOCOL TABLES
+    ========================================================
+  */
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS system_settings (
       setting_name TEXT PRIMARY KEY,
       setting_value TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
+    )
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS owner_audit_log (
       id SERIAL PRIMARY KEY,
       action TEXT NOT NULL,
       result TEXT NOT NULL,
       created_at TEXT NOT NULL
-    );
+    )
+  `);
 
-    /*
-      The system starts unlocked only if this setting
-      does not already exist.
+  /*
+    Create the default lockdown setting only if it
+    does not already exist.
 
-      Existing lockdown state is NEVER overwritten.
-    */
+    IMPORTANT:
+    ON CONFLICT DO NOTHING means an existing lockdown
+    state is never overwritten during a restart/deploy.
+  */
 
-    INSERT INTO system_settings
-      (setting_name, setting_value, updated_at)
-    VALUES
-      ('verifyit_lockdown', 'false', $1)
-    ON CONFLICT (setting_name)
-    DO NOTHING;
-  `, [now()]);
+  await pool.query(
+    `
+      INSERT INTO system_settings
+        (
+          setting_name,
+          setting_value,
+          updated_at
+        )
+      VALUES
+        (
+          $1,
+          $2,
+          $3
+        )
+      ON CONFLICT (setting_name)
+      DO NOTHING
+    `,
+    [
+      "verifyit_lockdown",
+      "false",
+      now()
+    ]
+  );
 
-  console.log("VerifyIt PostgreSQL database ready.");
+  console.log(
+    "VerifyIt PostgreSQL database ready."
+  );
 }
 
 /* =========================================================
@@ -137,7 +178,7 @@ function now() {
 
 /* =========================================================
    LOCK IN PROTOCOL
-   PERSISTENT LOCKDOWN STATE
+   GET CURRENT LOCKDOWN STATE
 ========================================================= */
 
 async function getLockdownState() {
@@ -159,46 +200,72 @@ async function getLockdownState() {
 
 /* =========================================================
    LOCK IN PROTOCOL
-   CHANGE LOCKDOWN STATE
+   SET LOCKDOWN STATE
 ========================================================= */
 
 async function setLockdownState(locked) {
-  await pool.query(`
-    INSERT INTO system_settings
-      (setting_name, setting_value, updated_at)
-    VALUES
-      ('verifyit_lockdown', $1, $2)
-    ON CONFLICT (setting_name)
-    DO UPDATE SET
-      setting_value = EXCLUDED.setting_value,
-      updated_at = EXCLUDED.updated_at
-  `, [
-    locked ? "true" : "false",
-    now()
-  ]);
+  await pool.query(
+    `
+      INSERT INTO system_settings
+        (
+          setting_name,
+          setting_value,
+          updated_at
+        )
+      VALUES
+        (
+          $1,
+          $2,
+          $3
+        )
+      ON CONFLICT (setting_name)
+      DO UPDATE SET
+        setting_value = EXCLUDED.setting_value,
+        updated_at = EXCLUDED.updated_at
+    `,
+    [
+      "verifyit_lockdown",
+      locked ? "true" : "false",
+      now()
+    ]
+  );
 }
 
 /* =========================================================
    LOCK IN PROTOCOL
-   AUDIT LOG
+   OWNER AUDIT LOG
 ========================================================= */
 
-async function writeOwnerAudit(action, result) {
+async function writeOwnerAudit(
+  action,
+  result
+) {
   try {
-    await pool.query(`
-      INSERT INTO owner_audit_log
-        (action, result, created_at)
-      VALUES
-        ($1, $2, $3)
-    `, [
-      action,
-      result,
-      now()
-    ]);
+    await pool.query(
+      `
+        INSERT INTO owner_audit_log
+          (
+            action,
+            result,
+            created_at
+          )
+        VALUES
+          (
+            $1,
+            $2,
+            $3
+          )
+      `,
+      [
+        action,
+        result,
+        now()
+      ]
+    );
   } catch (error) {
     /*
-      Audit logging must never expose the owner key
-      or prevent an otherwise successful lockdown action.
+      Audit failure must never expose the owner key
+      or crash the application.
     */
 
     console.error(
@@ -210,10 +277,12 @@ async function writeOwnerAudit(action, result) {
 
 /* =========================================================
    LOCK IN PROTOCOL
-   CONSTANT-TIME OWNER KEY COMPARISON
+   SAFE OWNER KEY COMPARISON
 ========================================================= */
 
-function safeOwnerKeyCompare(providedKey) {
+function safeOwnerKeyCompare(
+  providedKey
+) {
   if (!OWNER_KEY) {
     return false;
   }
@@ -226,10 +295,16 @@ function safeOwnerKeyCompare(providedKey) {
   }
 
   const providedBuffer =
-    Buffer.from(providedKey, "utf8");
+    Buffer.from(
+      providedKey,
+      "utf8"
+    );
 
   const ownerBuffer =
-    Buffer.from(OWNER_KEY, "utf8");
+    Buffer.from(
+      OWNER_KEY,
+      "utf8"
+    );
 
   if (
     providedBuffer.length !==
@@ -249,7 +324,11 @@ function safeOwnerKeyCompare(providedKey) {
    OWNER AUTHENTICATION
 ========================================================= */
 
-function ownerAuth(req, res, next) {
+function ownerAuth(
+  req,
+  res,
+  next
+) {
   if (!OWNER_KEY) {
     return res.status(503).json({
       success: false,
@@ -258,10 +337,24 @@ function ownerAuth(req, res, next) {
     });
   }
 
-  const providedKey =
-    req.headers["x-verifyit-owner-key"];
+  /*
+    Owner key is supplied through a request header.
 
-  if (!safeOwnerKeyCompare(providedKey)) {
+    Example:
+
+    x-verifyit-owner-key: YOUR_SECRET
+  */
+
+  const providedKey =
+    req.headers[
+      "x-verifyit-owner-key"
+    ];
+
+  if (
+    !safeOwnerKeyCompare(
+      providedKey
+    )
+  ) {
     writeOwnerAudit(
       "OWNER_AUTH",
       "FAILED"
@@ -289,7 +382,11 @@ async function lockdownMiddleware(
   next
 ) {
   /*
-    Owner requests are always allowed through.
+    Owner requests are allowed.
+
+    The owner routes are registered before this
+    middleware, but this also protects against
+    future owner-authenticated routes.
   */
 
   if (req.isVerifyItOwner) {
@@ -299,16 +396,17 @@ async function lockdownMiddleware(
   let locked;
 
   try {
-    locked = await getLockdownState();
+    locked =
+      await getLockdownState();
   } catch (error) {
     /*
-      FAIL-SAFE RULE:
+      FAIL-SAFE:
 
-      If the server cannot determine whether VerifyIt
-      is locked, protected operations are blocked.
+      If the server cannot determine the lockdown
+      state, normal protected operations are blocked.
 
       This prevents a database/settings failure from
-      accidentally opening the system.
+      accidentally opening VerifyIt.
     */
 
     console.error(
@@ -353,7 +451,11 @@ async function makeCode() {
   } while (
     (
       await pool.query(
-        "SELECT 1 FROM products WHERE code = $1",
+        `
+          SELECT 1
+          FROM products
+          WHERE code = $1
+        `,
         [code]
       )
     ).rowCount
@@ -366,7 +468,9 @@ async function makeCode() {
    BUSINESS TOKEN
 ========================================================= */
 
-function tokenFor(business) {
+function tokenFor(
+  business
+) {
   return jwt.sign(
     {
       id: business.id,
@@ -383,24 +487,36 @@ function tokenFor(business) {
    BUSINESS AUTHENTICATION
 ========================================================= */
 
-function auth(req, res, next) {
+function auth(
+  req,
+  res,
+  next
+) {
   try {
     const header =
       req.headers.authorization || "";
 
-    if (!header.startsWith("Bearer ")) {
-      throw new Error("Missing token");
+    if (
+      !header.startsWith(
+        "Bearer "
+      )
+    ) {
+      throw new Error(
+        "Missing token"
+      );
     }
 
-    req.business = jwt.verify(
-      header.slice(7),
-      JWT_SECRET
-    );
+    req.business =
+      jwt.verify(
+        header.slice(7),
+        JWT_SECRET
+      );
 
     next();
   } catch {
     res.status(401).json({
-      error: "Please log in."
+      error:
+        "Please log in."
     });
   }
 }
@@ -414,14 +530,28 @@ function publicProduct(
   includeImage = false
 ) {
   const result = {
-    brand: product.brand,
-    productName: product.product_name,
-    batch: product.batch,
-    code: product.code,
-    status: product.status,
+    brand:
+      product.brand,
+
+    productName:
+      product.product_name,
+
+    batch:
+      product.batch,
+
+    code:
+      product.code,
+
+    status:
+      product.status,
+
     verificationCount:
-      Number(product.verification_count),
-    createdAt: product.created_at
+      Number(
+        product.verification_count
+      ),
+
+    createdAt:
+      product.created_at
   };
 
   if (includeImage) {
@@ -436,19 +566,28 @@ function publicProduct(
    IMAGE VALIDATION
 ========================================================= */
 
-function validImageData(imageData) {
+function validImageData(
+  imageData
+) {
   if (!imageData) {
     return true;
   }
 
-  if (typeof imageData !== "string") {
+  if (
+    typeof imageData !==
+    "string"
+  ) {
     return false;
   }
 
   const validPrefix =
     /^data:image\/(jpeg|jpg|png|webp);base64,/i;
 
-  if (!validPrefix.test(imageData)) {
+  if (
+    !validPrefix.test(
+      imageData
+    )
+  ) {
     return false;
   }
 
@@ -458,7 +597,10 @@ function validImageData(imageData) {
     The frontend compresses images before sending them.
   */
 
-  if (imageData.length > 1500000) {
+  if (
+    imageData.length >
+    1500000
+  ) {
     return false;
   }
 
@@ -477,7 +619,10 @@ app.use(
 
 app.use(
   express.static(
-    path.join(__dirname, "public")
+    path.join(
+      __dirname,
+      "public"
+    )
   )
 );
 
@@ -490,7 +635,9 @@ app.get(
   "/api/health",
   async (_req, res) => {
     try {
-      await pool.query("SELECT 1");
+      await pool.query(
+        "SELECT 1"
+      );
 
       let locked = null;
 
@@ -505,7 +652,8 @@ app.get(
         ok: true,
         service: "VerifyIt",
         version: "1.5.0",
-        database: "postgresql",
+        database:
+          "postgresql",
         lockdown:
           locked === null
             ? "unknown"
@@ -543,7 +691,7 @@ app.get(
         error
       );
 
-      return res.status(503).json({
+      res.status(503).json({
         success: false,
         error:
           "Unable to read lockdown state."
@@ -578,7 +726,9 @@ app.post(
         });
       }
 
-      await setLockdownState(true);
+      await setLockdownState(
+        true
+      );
 
       await writeOwnerAudit(
         "LOCKDOWN",
@@ -637,7 +787,9 @@ app.post(
         });
       }
 
-      await setLockdownState(false);
+      await setLockdownState(
+        false
+      );
 
       await writeOwnerAudit(
         "UNLOCK",
@@ -693,7 +845,8 @@ app.get(
 
       res.json({
         success: true,
-        logs: result.rows
+        logs:
+          result.rows
       });
     } catch (error) {
       console.error(
@@ -711,9 +864,24 @@ app.get(
 );
 
 /* =========================================================
-   IMPORTANT
-   EVERYTHING BELOW THIS POINT IS PROTECTED BY
-   THE SERVER-SIDE LOCKDOWN PROTOCOL.
+   SERVER-SIDE LOCKDOWN STARTS HERE
+=========================================================
+
+   Everything below this point is protected by
+   the Lock In Protocol.
+
+   When lockdown = true:
+
+   - Registration blocked
+   - Login blocked
+   - Business APIs blocked
+   - Product APIs blocked
+   - Product image APIs blocked
+   - QR APIs blocked
+   - Public verification blocked
+   - Statistics blocked
+
+   Owner routes above remain available.
 ========================================================= */
 
 app.use(
@@ -748,22 +916,43 @@ app.post(
 
     try {
       const hash =
-        await bcrypt.hash(password, 12);
+        await bcrypt.hash(
+          password,
+          12
+        );
 
       const result =
         await pool.query(
           `
-          INSERT INTO businesses
-          (name, email, password_hash, created_at)
-          VALUES ($1, $2, $3, $4)
-          RETURNING id, name, email
+            INSERT INTO businesses
+            (
+              name,
+              email,
+              password_hash,
+              created_at
+            )
+            VALUES
+            (
+              $1,
+              $2,
+              $3,
+              $4
+            )
+            RETURNING
+              id,
+              name,
+              email
           `,
           [
-            String(name).trim(),
+            String(name)
+              .trim(),
+
             String(email)
               .trim()
               .toLowerCase(),
+
             hash,
+
             now()
           ]
         );
@@ -772,11 +961,16 @@ app.post(
         result.rows[0];
 
       res.status(201).json({
-        token: tokenFor(business),
+        token:
+          tokenFor(business),
+
         business
       });
     } catch (error) {
-      if (error.code === "23505") {
+      if (
+        error.code ===
+        "23505"
+      ) {
         return res.status(409).json({
           error:
             "That email is already registered."
@@ -809,12 +1003,14 @@ app.post(
       const result =
         await pool.query(
           `
-          SELECT *
-          FROM businesses
-          WHERE email = $1
+            SELECT *
+            FROM businesses
+            WHERE email = $1
           `,
           [
-            String(email || "")
+            String(
+              email || ""
+            )
               .trim()
               .toLowerCase()
           ]
@@ -825,10 +1021,14 @@ app.post(
 
       if (
         !business ||
-        !(await bcrypt.compare(
-          String(password || ""),
-          business.password_hash
-        ))
+        !(
+          await bcrypt.compare(
+            String(
+              password || ""
+            ),
+            business.password_hash
+          )
+        )
       ) {
         return res.status(401).json({
           error:
@@ -837,11 +1037,18 @@ app.post(
       }
 
       res.json({
-        token: tokenFor(business),
+        token:
+          tokenFor(business),
+
         business: {
-          id: business.id,
-          name: business.name,
-          email: business.email
+          id:
+            business.id,
+
+          name:
+            business.name,
+
+          email:
+            business.email
         }
       });
     } catch (error) {
@@ -867,21 +1074,31 @@ app.get(
       const result =
         await pool.query(
           `
-          SELECT id, name, email, created_at
-          FROM businesses
-          WHERE id = $1
+            SELECT
+              id,
+              name,
+              email,
+              created_at
+            FROM businesses
+            WHERE id = $1
           `,
-          [req.business.id]
+          [
+            req.business.id
+          ]
         );
 
-      if (!result.rows[0]) {
+      if (
+        !result.rows[0]
+      ) {
         return res.status(404).json({
           error:
             "Business not found."
         });
       }
 
-      res.json(result.rows[0]);
+      res.json(
+        result.rows[0]
+      );
     } catch (error) {
       console.error(error);
 
@@ -908,14 +1125,21 @@ app.post(
       imageData
     } = req.body || {};
 
-    if (!brand || !productName) {
+    if (
+      !brand ||
+      !productName
+    ) {
       return res.status(400).json({
         error:
           "Brand and product name are required."
       });
     }
 
-    if (!validImageData(imageData)) {
+    if (
+      !validImageData(
+        imageData
+      )
+    ) {
       return res.status(400).json({
         error:
           "Invalid or oversized product image."
@@ -932,28 +1156,49 @@ app.post(
       const result =
         await pool.query(
           `
-          INSERT INTO products
-          (
-            business_id,
-            brand,
-            product_name,
-            batch,
-            code,
-            created_at,
-            image_data
-          )
-          VALUES
-          ($1, $2, $3, $4, $5, $6, $7)
-          RETURNING *
+            INSERT INTO products
+            (
+              business_id,
+              brand,
+              product_name,
+              batch,
+              code,
+              created_at,
+              image_data
+            )
+            VALUES
+            (
+              $1,
+              $2,
+              $3,
+              $4,
+              $5,
+              $6,
+              $7
+            )
+            RETURNING *
           `,
           [
             req.business.id,
-            String(brand).trim(),
-            String(productName).trim(),
-            String(batch || "").trim(),
+
+            String(brand)
+              .trim(),
+
+            String(
+              productName
+            ).trim(),
+
+            String(
+              batch || ""
+            ).trim(),
+
             code,
+
             createdAt,
-            String(imageData || "")
+
+            String(
+              imageData || ""
+            )
           ]
         );
 
@@ -986,12 +1231,14 @@ app.get(
       const result =
         await pool.query(
           `
-          SELECT *
-          FROM products
-          WHERE business_id = $1
-          ORDER BY id DESC
+            SELECT *
+            FROM products
+            WHERE business_id = $1
+            ORDER BY id DESC
           `,
-          [req.business.id]
+          [
+            req.business.id
+          ]
         );
 
       res.json(
@@ -1033,10 +1280,10 @@ app.get(
       const result =
         await pool.query(
           `
-          SELECT image_data
-          FROM products
-          WHERE code = $1
-          AND business_id = $2
+            SELECT image_data
+            FROM products
+            WHERE code = $1
+            AND business_id = $2
           `,
           [
             code,
@@ -1056,7 +1303,8 @@ app.get(
 
       res.json({
         imageData:
-          product.image_data || ""
+          product.image_data ||
+          ""
       });
     } catch (error) {
       console.error(error);
@@ -1088,7 +1336,11 @@ app.patch(
       imageData
     } = req.body || {};
 
-    if (!validImageData(imageData)) {
+    if (
+      !validImageData(
+        imageData
+      )
+    ) {
       return res.status(400).json({
         error:
           "Invalid or oversized product image."
@@ -1099,20 +1351,26 @@ app.patch(
       const result =
         await pool.query(
           `
-          UPDATE products
-          SET image_data = $1
-          WHERE code = $2
-          AND business_id = $3
-          RETURNING *
+            UPDATE products
+            SET image_data = $1
+            WHERE code = $2
+            AND business_id = $3
+            RETURNING *
           `,
           [
-            String(imageData || ""),
+            String(
+              imageData || ""
+            ),
+
             code,
+
             req.business.id
           ]
         );
 
-      if (!result.rowCount) {
+      if (
+        !result.rowCount
+      ) {
         return res.status(404).json({
           error:
             "Product not found."
@@ -1121,6 +1379,7 @@ app.patch(
 
       res.json({
         ok: true,
+
         product:
           publicProduct(
             result.rows[0],
@@ -1157,10 +1416,10 @@ app.delete(
       const result =
         await pool.query(
           `
-          DELETE FROM products
-          WHERE code = $1
-          AND business_id = $2
-          RETURNING id
+            DELETE FROM products
+            WHERE code = $1
+            AND business_id = $2
+            RETURNING id
           `,
           [
             code,
@@ -1168,7 +1427,9 @@ app.delete(
           ]
         );
 
-      if (!result.rowCount) {
+      if (
+        !result.rowCount
+      ) {
         return res.status(404).json({
           error:
             "Product not found."
@@ -1177,6 +1438,7 @@ app.delete(
 
       res.json({
         ok: true,
+
         message:
           "Product deleted."
       });
@@ -1219,19 +1481,23 @@ app.patch(
       const result =
         await pool.query(
           `
-          UPDATE products
-          SET status = $1
-          WHERE code = $2
-          AND business_id = $3
+            UPDATE products
+            SET status = $1
+            WHERE code = $2
+            AND business_id = $3
           `,
           [
             status,
+
             req.params.code,
+
             req.business.id
           ]
         );
 
-      if (!result.rowCount) {
+      if (
+        !result.rowCount
+      ) {
         return res.status(404).json({
           error:
             "Product not found."
@@ -1264,13 +1530,14 @@ app.get(
       const result =
         await pool.query(
           `
-          SELECT *
-          FROM products
-          WHERE code = $1
-          AND business_id = $2
+            SELECT *
+            FROM products
+            WHERE code = $1
+            AND business_id = $2
           `,
           [
             req.params.code,
+
             req.business.id
           ]
         );
@@ -1304,7 +1571,9 @@ app.get(
         );
 
       res.json({
-        url: verifyUrl,
+        url:
+          verifyUrl,
+
         data
       });
     } catch (error) {
@@ -1336,30 +1605,43 @@ app.get(
       const result =
         await pool.query(
           `
-          SELECT *
-          FROM products
-          WHERE code = $1
+            SELECT *
+            FROM products
+            WHERE code = $1
           `,
-          [code]
+          [
+            code
+          ]
         );
 
       const product =
         result.rows[0];
 
       /*
-        Code doesn't exist
+        Code doesn't exist.
       */
 
       if (!product) {
         await pool.query(
           `
-          INSERT INTO verifications
-          (code, result, checked_at)
-          VALUES ($1, $2, $3)
+            INSERT INTO verifications
+            (
+              code,
+              result,
+              checked_at
+            )
+            VALUES
+            (
+              $1,
+              $2,
+              $3
+            )
           `,
           [
             code,
+
             "not_verified",
+
             now()
           ]
         );
@@ -1367,19 +1649,21 @@ app.get(
         return res.json({
           result:
             "not_verified",
+
           message:
             "This code is not registered in the VerifyIt database."
         });
       }
 
       /*
-        Determine result
+        Determine result.
       */
 
       let verificationResult;
 
       if (
-        product.status !== "active"
+        product.status !==
+        "active"
       ) {
         verificationResult =
           "warning";
@@ -1398,7 +1682,8 @@ app.get(
       let message;
 
       if (
-        product.status !== "active"
+        product.status !==
+        "active"
       ) {
         message =
           `This product record is marked ${product.status}.`;
@@ -1414,54 +1699,67 @@ app.get(
       }
 
       /*
-        Increase verification count
+        Increase verification count.
       */
 
       await pool.query(
         `
-        UPDATE products
-        SET verification_count =
-          verification_count + 1
-        WHERE id = $1
+          UPDATE products
+          SET verification_count =
+            verification_count + 1
+          WHERE id = $1
         `,
-        [product.id]
+        [
+          product.id
+        ]
       );
 
       /*
-        Record verification
+        Record verification.
       */
 
       await pool.query(
         `
-        INSERT INTO verifications
-        (
-          product_id,
-          code,
-          result,
-          checked_at
-        )
-        VALUES ($1, $2, $3, $4)
+          INSERT INTO verifications
+          (
+            product_id,
+            code,
+            result,
+            checked_at
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4
+          )
         `,
         [
           product.id,
+
           code,
+
           verificationResult,
+
           now()
         ]
       );
 
       /*
-        Get updated product
+        Get updated product.
       */
 
       const freshResult =
         await pool.query(
           `
-          SELECT *
-          FROM products
-          WHERE id = $1
+            SELECT *
+            FROM products
+            WHERE id = $1
           `,
-          [product.id]
+          [
+            product.id
+          ]
         );
 
       res.json({
@@ -1499,36 +1797,42 @@ app.get(
       const products =
         await pool.query(
           `
-          SELECT COUNT(*) AS count
-          FROM products
-          WHERE business_id = $1
+            SELECT COUNT(*) AS count
+            FROM products
+            WHERE business_id = $1
           `,
-          [req.business.id]
+          [
+            req.business.id
+          ]
         );
 
       const checks =
         await pool.query(
           `
-          SELECT COUNT(*) AS count
-          FROM verifications v
-          JOIN products p
-            ON p.id = v.product_id
-          WHERE p.business_id = $1
+            SELECT COUNT(*) AS count
+            FROM verifications v
+            JOIN products p
+              ON p.id = v.product_id
+            WHERE p.business_id = $1
           `,
-          [req.business.id]
+          [
+            req.business.id
+          ]
         );
 
       const warnings =
         await pool.query(
           `
-          SELECT COUNT(*) AS count
-          FROM verifications v
-          JOIN products p
-            ON p.id = v.product_id
-          WHERE p.business_id = $1
-          AND v.result = 'warning'
+            SELECT COUNT(*) AS count
+            FROM verifications v
+            JOIN products p
+              ON p.id = v.product_id
+            WHERE p.business_id = $1
+            AND v.result = 'warning'
           `,
-          [req.business.id]
+          [
+            req.business.id
+          ]
         );
 
       res.json({
