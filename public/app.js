@@ -1,3 +1,4 @@
+```javascript
 /* =========================================================
    VERIFYIT V1.6
    Partner Dashboard + Bulk Product Import
@@ -12,26 +13,34 @@ const $ = id => document.getElementById(id);
 async function api(url, options = {}) {
   const token = localStorage.getItem("verifyit_token");
 
+  const requestOptions = {
+    ...options
+  };
+
   const headers = {
     ...(options.headers || {})
   };
 
   if (
-    options.body &&
-    typeof options.body !== "string"
+    requestOptions.body &&
+    typeof requestOptions.body !== "string"
   ) {
     headers["Content-Type"] = "application/json";
-    options.body = JSON.stringify(options.body);
+    requestOptions.body = JSON.stringify(
+      requestOptions.body
+    );
   }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
+  requestOptions.headers = headers;
+
+  const response = await fetch(
+    url,
+    requestOptions
+  );
 
   let data = {};
 
@@ -201,12 +210,9 @@ async function loadCurrentUser() {
       await api("/api/me");
 
     showDashboard(business);
+
   } catch (error) {
 
-    /*
-      Do not destroy the token simply because
-      VerifyIt is temporarily locked.
-    */
     if (
       error.message ===
       "VerifyIt is currently under lockdown."
@@ -231,8 +237,19 @@ async function loadCurrentUser() {
    REGISTER
 ========================================================= */
 
-if ($("registerForm")) {
-  $("registerForm").addEventListener(
+function connectRegisterForm() {
+  const form =
+    $("registerForm");
+
+  if (!form) {
+    console.warn(
+      "VerifyIt: registerForm not found."
+    );
+
+    return;
+  }
+
+  form.addEventListener(
     "submit",
     async event => {
       event.preventDefault();
@@ -244,19 +261,25 @@ if ($("registerForm")) {
             body: {
               name:
                 $("registerName")
-                  .value
-                  .trim(),
+                  ?.value
+                  ?.trim() || "",
 
               email:
                 $("registerEmail")
-                  .value
-                  .trim(),
+                  ?.value
+                  ?.trim() || "",
 
               password:
                 $("registerPassword")
-                  .value
+                  ?.value || ""
             }
           });
+
+        if (!data.token) {
+          throw new Error(
+            "Registration succeeded but no login token was returned."
+          );
+        }
 
         localStorage.setItem(
           "verifyit_token",
@@ -268,7 +291,10 @@ if ($("registerForm")) {
         );
 
       } catch (error) {
-        alert(error.message);
+        alert(
+          error.message ||
+          "Registration failed."
+        );
       }
     }
   );
@@ -278,27 +304,102 @@ if ($("registerForm")) {
    LOGIN
 ========================================================= */
 
-if ($("loginForm")) {
-  $("loginForm").addEventListener(
+function connectLoginForm() {
+  const form =
+    $("loginForm");
+
+  if (!form) {
+    console.error(
+      "VerifyIt: loginForm not found."
+    );
+
+    return;
+  }
+
+  console.log(
+    "VerifyIt: Login form connected."
+  );
+
+  form.addEventListener(
     "submit",
     async event => {
       event.preventDefault();
+
+      console.log(
+        "VerifyIt: Login submitted."
+      );
+
+      const emailInput =
+        $("loginEmail");
+
+      const passwordInput =
+        $("loginPassword");
+
+      if (!emailInput || !passwordInput) {
+        alert(
+          "Login form is missing the email or password field."
+        );
+
+        return;
+      }
+
+      const email =
+        emailInput.value.trim();
+
+      const password =
+        passwordInput.value;
+
+      if (!email) {
+        alert(
+          "Please enter your email address."
+        );
+
+        emailInput.focus();
+
+        return;
+      }
+
+      if (!password) {
+        alert(
+          "Please enter your password."
+        );
+
+        passwordInput.focus();
+
+        return;
+      }
+
+      const submitButton =
+        form.querySelector(
+          'button[type="submit"]'
+        );
+
+      const originalText =
+        submitButton
+          ? submitButton.textContent
+          : "";
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent =
+          "Logging in...";
+      }
 
       try {
         const data =
           await api("/api/login", {
             method: "POST",
             body: {
-              email:
-                $("loginEmail")
-                  .value
-                  .trim(),
-
-              password:
-                $("loginPassword")
-                  .value
+              email,
+              password
             }
           });
+
+        if (!data.token) {
+          throw new Error(
+            "Login succeeded but no authentication token was returned."
+          );
+        }
 
         localStorage.setItem(
           "verifyit_token",
@@ -310,7 +411,19 @@ if ($("loginForm")) {
         );
 
       } catch (error) {
-        alert(error.message);
+
+        alert(
+          error.message ||
+          "Login failed."
+        );
+
+      } finally {
+
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent =
+            originalText || "Login";
+        }
       }
     }
   );
@@ -339,8 +452,15 @@ window.logout = logout;
    SINGLE PRODUCT REGISTRATION
 ========================================================= */
 
-if ($("productForm")) {
-  $("productForm").addEventListener(
+function connectProductForm() {
+  const form =
+    $("productForm");
+
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener(
     "submit",
     async event => {
       event.preventDefault();
@@ -368,20 +488,18 @@ if ($("productForm")) {
             body: {
               brand:
                 $("productBrand")
-                  .value
-                  .trim(),
+                  ?.value
+                  ?.trim() || "",
 
               productName:
                 $("productName")
-                  .value
-                  .trim(),
+                  ?.value
+                  ?.trim() || "",
 
               batch:
                 $("productBatch")
-                  ? $("productBatch")
-                      .value
-                      .trim()
-                  : "",
+                  ?.value
+                  ?.trim() || "",
 
               imageData
             }
@@ -393,7 +511,7 @@ if ($("productForm")) {
           data.product.code
         );
 
-        $("productForm").reset();
+        form.reset();
 
         await loadProducts();
         await loadStats();
@@ -417,10 +535,6 @@ async function loadProducts() {
     const products =
       data.products || [];
 
-    /*
-      Try several common catalog container IDs
-      so the existing V1.6 HTML remains compatible.
-    */
     const container =
       $("productList") ||
       $("productsList") ||
@@ -477,7 +591,9 @@ async function loadProducts() {
 
             <div>
               <strong>Checks</strong><br>
-              ${Number(product.verificationCount || 0)}
+              ${Number(
+                product.verificationCount || 0
+              )}
             </div>
 
           </div>
@@ -541,10 +657,6 @@ async function loadStats() {
   try {
     const data =
       await api("/api/stats");
-
-    /*
-      Support the existing dashboard IDs.
-    */
 
     if ($("productCount")) {
       $("productCount").textContent =
@@ -837,6 +949,7 @@ function showQRModal({
           document.createElement("a");
 
         link.href = image;
+
         link.download =
           `verifyit-${code}.png`;
 
@@ -873,16 +986,14 @@ function removeQRModal() {
    V1.6 BULK IMPORT
 ========================================================= */
 
+let bulkProducts = [];
+
 function openBulkImport() {
   createBulkImportModal();
 }
 
 window.openBulkImport =
   openBulkImport;
-
-/* =========================================================
-   CREATE BULK IMPORT MODAL
-========================================================= */
 
 function createBulkImportModal() {
   removeBulkImportModal();
@@ -1051,35 +1162,29 @@ function createBulkImportModal() {
   );
 
   $("verifyitBulkClose")
-    .addEventListener(
+    ?.addEventListener(
       "click",
       removeBulkImportModal
     );
 
   $("verifyitBulkCancel")
-    .addEventListener(
+    ?.addEventListener(
       "click",
       removeBulkImportModal
     );
 
   $("verifyitBulkFile")
-    .addEventListener(
+    ?.addEventListener(
       "change",
       handleBulkFile
     );
 
   $("verifyitBulkImport")
-    .addEventListener(
+    ?.addEventListener(
       "click",
       submitBulkProducts
     );
 }
-
-/* =========================================================
-   BULK IMPORT STATE
-========================================================= */
-
-let bulkProducts = [];
 
 /* =========================================================
    READ BULK FILE
@@ -1149,9 +1254,6 @@ function parseCSVProducts(text) {
   const rows =
     lines.map(parseCSVLine);
 
-  /*
-    Detect optional header row.
-  */
   let startIndex = 0;
 
   const first =
@@ -1237,10 +1339,6 @@ function parseCSVProducts(text) {
   return products;
 }
 
-/* =========================================================
-   SIMPLE CSV PARSER
-========================================================= */
-
 function parseCSVLine(line) {
   const result = [];
   let current = "";
@@ -1304,7 +1402,7 @@ function renderBulkPreview() {
   const importButton =
     $("verifyitBulkImport");
 
-  if (!preview) {
+  if (!preview || !importButton) {
     return;
   }
 
@@ -1422,6 +1520,10 @@ async function submitBulkProducts() {
 
   const button =
     $("verifyitBulkImport");
+
+  if (!button) {
+    return;
+  }
 
   button.disabled = true;
 
@@ -1603,7 +1705,7 @@ window.removeBulkImportModal =
   removeBulkImportModal;
 
 /* =========================================================
-   CONNECT EXISTING BULK BUTTON
+   CONNECT BULK BUTTON
 ========================================================= */
 
 function connectBulkButton() {
@@ -1886,9 +1988,6 @@ function autoVerifyFromUrl() {
       verifyCode;
   }
 
-  /*
-    Give the page a moment to finish rendering.
-  */
   setTimeout(() => {
     verifyProduct(
       verifyCode
@@ -1929,15 +2028,84 @@ document.addEventListener(
   "DOMContentLoaded",
   () => {
 
-    connectBulkButton();
+    console.log(
+      "VerifyIt V1.6 app.js loaded."
+    );
 
-    connectBulkLinks();
+    try {
+      connectLoginForm();
+    } catch (error) {
+      console.error(
+        "Login initialization error:",
+        error
+      );
+    }
 
-    connectVerificationForm();
+    try {
+      connectRegisterForm();
+    } catch (error) {
+      console.error(
+        "Register initialization error:",
+        error
+      );
+    }
 
-    loadCurrentUser();
+    try {
+      connectProductForm();
+    } catch (error) {
+      console.error(
+        "Product form initialization error:",
+        error
+      );
+    }
 
-    autoVerifyFromUrl();
+    try {
+      connectBulkButton();
+    } catch (error) {
+      console.error(
+        "Bulk button initialization error:",
+        error
+      );
+    }
+
+    try {
+      connectBulkLinks();
+    } catch (error) {
+      console.error(
+        "Bulk links initialization error:",
+        error
+      );
+    }
+
+    try {
+      connectVerificationForm();
+    } catch (error) {
+      console.error(
+        "Verification initialization error:",
+        error
+      );
+    }
+
+    try {
+      loadCurrentUser();
+    } catch (error) {
+      console.error(
+        "Current user initialization error:",
+        error
+      );
+    }
+
+    try {
+      autoVerifyFromUrl();
+    } catch (error) {
+      console.error(
+        "Auto verification initialization error:",
+        error
+      );
+    }
 
   }
 );
+```
+
+After replacing it, **deploy that one file only**, then hard-refresh VerifyIt and press Login again. The corrected version also logs `VerifyIt: Login submitted.` in the browser console, so if it still doesn't respond, we'll know immediately whether the problem is the button/form or the `/api/login` request.
