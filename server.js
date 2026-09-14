@@ -9,38 +9,53 @@ import { fileURLToPath } from "url";
 
 const { Pool } = pg;
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname =
+  path.dirname(
+    fileURLToPath(import.meta.url)
+  );
+
 const app = express();
 
-const PORT = process.env.PORT || 3000;
+const PORT =
+  process.env.PORT || 3000;
 
 const JWT_SECRET =
-  process.env.JWT_SECRET || "CHANGE_ME_IN_PRODUCTION";
+  process.env.JWT_SECRET ||
+  "CHANGE_ME_IN_PRODUCTION";
 
 const OWNER_KEY =
   process.env.VERIFYIT_OWNER_KEY || "";
 
 if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL is not configured.");
+
+  console.error(
+    "DATABASE_URL is not configured."
+  );
+
   process.exit(1);
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+const pool =
+  new Pool({
+    connectionString:
+      process.env.DATABASE_URL,
 
-/* -----------------------------
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+
+
+/* =========================================================
    DATABASE SETUP
------------------------------ */
+========================================================= */
 
 async function initDatabase() {
 
   /*
     IMPORTANT:
     Each PostgreSQL command is executed separately.
+
     This avoids:
     "cannot insert multiple commands into a prepared statement"
   */
@@ -118,12 +133,12 @@ async function initDatabase() {
   `);
 
   /*
-    Create the default lockdown state only if it
-    does not already exist.
+    Create the default lockdown state only if
+    it does not already exist.
 
     IMPORTANT:
-    ON CONFLICT DO NOTHING means an existing
-    lockdown state is preserved.
+    ON CONFLICT DO NOTHING preserves
+    the existing lockdown state.
   */
 
   await pool.query(
@@ -135,6 +150,7 @@ async function initDatabase() {
         updated_at
       )
       VALUES ($1, $2, $3)
+
       ON CONFLICT (setting_name)
       DO NOTHING
     `,
@@ -150,42 +166,52 @@ async function initDatabase() {
   );
 }
 
-/* -----------------------------
+
+/* =========================================================
    TIME
------------------------------ */
+========================================================= */
 
 function now() {
+
   return new Date().toISOString();
 }
 
-/* -----------------------------
+
+/* =========================================================
    LOCKDOWN HELPERS
------------------------------ */
+========================================================= */
 
 async function getLockdownState() {
 
-  const result = await pool.query(
-    `
-      SELECT setting_value
-      FROM system_settings
-      WHERE setting_name = $1
-    `,
-    ["verifyit_lockdown"]
-  );
+  const result =
+    await pool.query(
+      `
+        SELECT setting_value
+        FROM system_settings
+        WHERE setting_name = $1
+      `,
+      [
+        "verifyit_lockdown"
+      ]
+    );
 
   if (!result.rows[0]) {
+
     throw new Error(
       "Lockdown state is unavailable."
     );
   }
 
   return (
-    result.rows[0].setting_value === "true"
+    result.rows[0].setting_value ===
+    "true"
   );
 }
 
 
-async function setLockdownState(locked) {
+async function setLockdownState(
+  locked
+) {
 
   await pool.query(
     `
@@ -199,12 +225,19 @@ async function setLockdownState(locked) {
 
       ON CONFLICT (setting_name)
       DO UPDATE SET
-        setting_value = EXCLUDED.setting_value,
-        updated_at = EXCLUDED.updated_at
+        setting_value =
+          EXCLUDED.setting_value,
+
+        updated_at =
+          EXCLUDED.updated_at
     `,
     [
       "verifyit_lockdown",
-      locked ? "true" : "false",
+
+      locked
+        ? "true"
+        : "false",
+
       now()
     ]
   );
@@ -245,9 +278,9 @@ async function writeOwnerAudit(
 }
 
 
-/* -----------------------------
+/* =========================================================
    OWNER KEY SECURITY
------------------------------ */
+========================================================= */
 
 function safeOwnerKeyCompare(
   providedKey
@@ -258,7 +291,8 @@ function safeOwnerKeyCompare(
   }
 
   if (
-    typeof providedKey !== "string"
+    typeof providedKey !==
+    "string"
   ) {
     return false;
   }
@@ -289,9 +323,9 @@ function safeOwnerKeyCompare(
 }
 
 
-/* -----------------------------
+/* =========================================================
    OWNER AUTHENTICATION
------------------------------ */
+========================================================= */
 
 function ownerAuth(
   req,
@@ -302,7 +336,9 @@ function ownerAuth(
   if (!OWNER_KEY) {
 
     return res.status(503).json({
+
       success: false,
+
       error:
         "Owner controls are not configured."
     });
@@ -325,21 +361,24 @@ function ownerAuth(
     );
 
     return res.status(401).json({
+
       success: false,
+
       error:
         "Owner authentication failed."
     });
   }
 
-  req.isVerifyItOwner = true;
+  req.isVerifyItOwner =
+    true;
 
   next();
 }
 
 
-/* -----------------------------
+/* =========================================================
    LOCKDOWN MIDDLEWARE
------------------------------ */
+========================================================= */
 
 async function lockdownMiddleware(
   req,
@@ -348,11 +387,12 @@ async function lockdownMiddleware(
 ) {
 
   /*
-    Owner-authenticated requests are
-    allowed through.
+    Owner-authenticated requests
+    are always allowed through.
   */
 
   if (req.isVerifyItOwner) {
+
     return next();
   }
 
@@ -364,8 +404,11 @@ async function lockdownMiddleware(
     if (locked) {
 
       return res.status(503).json({
+
         success: false,
+
         locked: true,
+
         error:
           "VerifyIt is currently under lockdown."
       });
@@ -382,13 +425,16 @@ async function lockdownMiddleware(
 
     /*
       FAIL SAFE:
-      If the system cannot determine whether
-      it is locked, protected operations are blocked.
+      If lockdown state cannot be determined,
+      protected operations are blocked.
     */
 
     return res.status(503).json({
+
       success: false,
+
       locked: true,
+
       error:
         "VerifyIt is temporarily unavailable."
     });
@@ -396,28 +442,37 @@ async function lockdownMiddleware(
 }
 
 
-/* -----------------------------
+/* =========================================================
    CODE GENERATOR
------------------------------ */
+========================================================= */
 
-async function makeCode() {
+async function makeCode(
+  database = pool
+) {
 
   let code;
 
   do {
 
-    code = crypto
-      .randomBytes(8)
-      .toString("hex")
-      .toUpperCase()
-      .match(/.{1,4}/g)
-      .join("-");
+    code =
+      crypto
+        .randomBytes(8)
+        .toString("hex")
+        .toUpperCase()
+        .match(/.{1,4}/g)
+        .join("-");
 
   } while (
     (
-      await pool.query(
-        "SELECT 1 FROM products WHERE code = $1",
-        [code]
+      await database.query(
+        `
+          SELECT 1
+          FROM products
+          WHERE code = $1
+        `,
+        [
+          code
+        ]
       )
     ).rowCount
   );
@@ -426,9 +481,63 @@ async function makeCode() {
 }
 
 
-/* -----------------------------
+/* =========================================================
+   VERIFY URL
+========================================================= */
+
+function getVerifyUrl(
+  req,
+  code
+) {
+
+  const base =
+    process.env.PUBLIC_BASE_URL ||
+    `${req.protocol}://${req.get("host")}`;
+
+  return (
+    `${base}/?verify=` +
+    `${encodeURIComponent(code)}` +
+    "#verify"
+  );
+}
+
+
+/* =========================================================
+   QR GENERATOR
+========================================================= */
+
+async function generateProductQR(
+  req,
+  code
+) {
+
+  const verifyUrl =
+    getVerifyUrl(
+      req,
+      code
+    );
+
+  const data =
+    await QRCode.toDataURL(
+      verifyUrl,
+      {
+        margin: 2,
+        width: 600
+      }
+    );
+
+  return {
+    url:
+      verifyUrl,
+
+    data
+  };
+}
+
+
+/* =========================================================
    JWT
------------------------------ */
+========================================================= */
 
 function tokenFor(
   business
@@ -436,20 +545,26 @@ function tokenFor(
 
   return jwt.sign(
     {
-      id: business.id,
-      email: business.email
+      id:
+        business.id,
+
+      email:
+        business.email
     },
+
     JWT_SECRET,
+
     {
-      expiresIn: "7d"
+      expiresIn:
+        "7d"
     }
   );
 }
 
 
-/* -----------------------------
+/* =========================================================
    BUSINESS AUTH
------------------------------ */
+========================================================= */
 
 function auth(
   req,
@@ -460,13 +575,15 @@ function auth(
   try {
 
     const header =
-      req.headers.authorization || "";
+      req.headers.authorization ||
+      "";
 
     if (
       !header.startsWith(
         "Bearer "
       )
     ) {
+
       throw new Error(
         "Missing token"
       );
@@ -483,6 +600,7 @@ function auth(
   } catch {
 
     res.status(401).json({
+
       error:
         "Please log in."
     });
@@ -490,9 +608,9 @@ function auth(
 }
 
 
-/* -----------------------------
+/* =========================================================
    PUBLIC PRODUCT DATA
------------------------------ */
+========================================================= */
 
 function publicProduct(
   product,
@@ -528,16 +646,17 @@ function publicProduct(
   if (includeImage) {
 
     result.imageData =
-      product.image_data || "";
+      product.image_data ||
+      "";
   }
 
   return result;
 }
 
 
-/* -----------------------------
+/* =========================================================
    IMAGE VALIDATION
------------------------------ */
+========================================================= */
 
 function validImageData(
   imageData
@@ -580,9 +699,9 @@ function validImageData(
 }
 
 
-/* -----------------------------
+/* =========================================================
    EXPRESS
------------------------------ */
+========================================================= */
 
 app.use(
   express.json({
@@ -600,9 +719,9 @@ app.use(
 );
 
 
-/* -----------------------------
+/* =========================================================
    HEALTH CHECK
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/health",
@@ -614,7 +733,8 @@ app.get(
         "SELECT 1"
       );
 
-      let locked = false;
+      let locked =
+        false;
 
       try {
 
@@ -623,7 +743,8 @@ app.get(
 
       } catch {
 
-        locked = true;
+        locked =
+          true;
       }
 
       res.json({
@@ -634,7 +755,7 @@ app.get(
           "VerifyIt",
 
         version:
-          "1.5.0",
+          "1.6.0",
 
         database:
           "postgresql",
@@ -657,9 +778,9 @@ app.get(
 );
 
 
-/* -----------------------------
+/* =========================================================
    OWNER STATUS
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/owner/lockdown-status",
@@ -694,9 +815,9 @@ app.get(
 );
 
 
-/* -----------------------------
+/* =========================================================
    OWNER LOCK
------------------------------ */
+========================================================= */
 
 app.post(
   "/api/owner/lockdown",
@@ -745,9 +866,9 @@ app.post(
 );
 
 
-/* -----------------------------
+/* =========================================================
    OWNER UNLOCK
------------------------------ */
+========================================================= */
 
 app.post(
   "/api/owner/unlock",
@@ -796,9 +917,9 @@ app.post(
 );
 
 
-/* -----------------------------
+/* =========================================================
    OWNER AUDIT LOG
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/owner/audit-log",
@@ -847,7 +968,7 @@ app.get(
 
 /* =========================================================
    LOCKDOWN PROTECTION
-   ========================================================= */
+========================================================= */
 
 app.use(
   "/api",
@@ -855,9 +976,9 @@ app.use(
 );
 
 
-/* -----------------------------
+/* =========================================================
    BUSINESS REGISTRATION
------------------------------ */
+========================================================= */
 
 app.post(
   "/api/register",
@@ -867,7 +988,8 @@ app.post(
       name,
       email,
       password
-    } = req.body || {};
+    } =
+      req.body || {};
 
     if (
       !name ||
@@ -903,7 +1025,11 @@ app.post(
             )
             VALUES
             ($1, $2, $3, $4)
-            RETURNING id, name, email
+
+            RETURNING
+              id,
+              name,
+              email
           `,
           [
             String(name)
@@ -958,9 +1084,9 @@ app.post(
 );
 
 
-/* -----------------------------
+/* =========================================================
    BUSINESS LOGIN
------------------------------ */
+========================================================= */
 
 app.post(
   "/api/login",
@@ -969,7 +1095,8 @@ app.post(
     const {
       email,
       password
-    } = req.body || {};
+    } =
+      req.body || {};
 
     try {
 
@@ -992,10 +1119,12 @@ app.post(
 
       if (
         !business ||
-        !(await bcrypt.compare(
-          String(password || ""),
-          business.password_hash
-        ))
+        !(
+          await bcrypt.compare(
+            String(password || ""),
+            business.password_hash
+          )
+        )
       ) {
 
         return res.status(401).json({
@@ -1039,9 +1168,9 @@ app.post(
 );
 
 
-/* -----------------------------
+/* =========================================================
    CURRENT BUSINESS
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/me",
@@ -1093,9 +1222,9 @@ app.get(
 );
 
 
-/* -----------------------------
-   CREATE PRODUCT
------------------------------ */
+/* =========================================================
+   CREATE SINGLE PRODUCT
+========================================================= */
 
 app.post(
   "/api/products",
@@ -1107,7 +1236,8 @@ app.post(
       productName,
       batch,
       imageData
-    } = req.body || {};
+    } =
+      req.body || {};
 
     if (
       !brand ||
@@ -1157,6 +1287,7 @@ app.post(
             )
             VALUES
             ($1, $2, $3, $4, $5, $6, $7)
+
             RETURNING *
           `,
           [
@@ -1204,9 +1335,435 @@ app.post(
 );
 
 
-/* -----------------------------
+/* =========================================================
+   V1.6 BULK PRODUCT REGISTRATION
+========================================================= */
+
+/*
+  Expected request:
+
+  POST /api/products/bulk
+
+  {
+    "products": [
+      {
+        "brand": "Brand A",
+        "productName": "Product A",
+        "batch": "BATCH-001"
+      },
+      {
+        "brand": "Brand A",
+        "productName": "Product B",
+        "batch": "BATCH-002"
+      }
+    ]
+  }
+
+  The operation is transactional.
+
+  If ANY row is invalid, NO products are
+  inserted.
+
+  Every successfully inserted product
+  receives:
+
+  - unique VerifyIt code
+  - active status
+  - automatic QR code
+  - verification URL
+*/
+
+app.post(
+  "/api/products/bulk",
+  auth,
+  async (req, res) => {
+
+    const incoming =
+      req.body?.products;
+
+    if (
+      !Array.isArray(
+        incoming
+      )
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        error:
+          "A products array is required."
+      });
+    }
+
+    if (
+      incoming.length === 0
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        error:
+          "At least one product is required."
+      });
+    }
+
+    /*
+      Protect the server from enormous
+      requests during the prototype stage.
+    */
+
+    if (
+      incoming.length > 100
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        error:
+          "A maximum of 100 products can be imported at once."
+      });
+    }
+
+    /*
+      Validate everything BEFORE opening
+      the database transaction.
+    */
+
+    const errors = [];
+
+    const normalized =
+      incoming.map(
+        (item, index) => {
+
+          const row =
+            item &&
+            typeof item === "object"
+              ? item
+              : {};
+
+          const brand =
+            String(
+              row.brand || ""
+            ).trim();
+
+          const productName =
+            String(
+              row.productName ||
+              row.product ||
+              row.name ||
+              ""
+            ).trim();
+
+          const batch =
+            String(
+              row.batch || ""
+            ).trim();
+
+          const imageData =
+            row.imageData ||
+            "";
+
+          const rowErrors = [];
+
+          if (!brand) {
+
+            rowErrors.push(
+              "Brand is required."
+            );
+          }
+
+          if (!productName) {
+
+            rowErrors.push(
+              "Product name is required."
+            );
+          }
+
+          if (
+            brand.length > 500
+          ) {
+
+            rowErrors.push(
+              "Brand is too long."
+            );
+          }
+
+          if (
+            productName.length > 500
+          ) {
+
+            rowErrors.push(
+              "Product name is too long."
+            );
+          }
+
+          if (
+            batch.length > 500
+          ) {
+
+            rowErrors.push(
+              "Batch is too long."
+            );
+          }
+
+          /*
+            Bulk import currently supports
+            imageData if supplied, but the
+            initial CSV/Excel interface will
+            normally leave it empty.
+          */
+
+          if (
+            imageData &&
+            !validImageData(
+              imageData
+            )
+          ) {
+
+            rowErrors.push(
+              "Invalid or oversized product image."
+            );
+          }
+
+          if (
+            rowErrors.length
+          ) {
+
+            errors.push({
+
+              row:
+                index + 1,
+
+              errors:
+                rowErrors
+            });
+          }
+
+          return {
+
+            brand,
+
+            productName,
+
+            batch,
+
+            imageData:
+              String(
+                imageData || ""
+              )
+          };
+        }
+      );
+
+    /*
+      Reject the entire batch if any
+      row failed validation.
+    */
+
+    if (
+      errors.length
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        error:
+          "Bulk import validation failed.",
+
+        rowErrors:
+          errors
+      });
+    }
+
+    const client =
+      await pool.connect();
+
+    const createdProducts =
+      [];
+
+    try {
+
+      await client.query(
+        "BEGIN"
+      );
+
+      for (
+        let index = 0;
+        index < normalized.length;
+        index++
+      ) {
+
+        const item =
+          normalized[index];
+
+        const code =
+          await makeCode(
+            client
+          );
+
+        const createdAt =
+          now();
+
+        const result =
+          await client.query(
+            `
+              INSERT INTO products
+              (
+                business_id,
+                brand,
+                product_name,
+                batch,
+                code,
+                status,
+                verification_count,
+                created_at,
+                image_data
+              )
+              VALUES
+              (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                'active',
+                0,
+                $6,
+                $7
+              )
+
+              RETURNING *
+            `,
+            [
+              req.business.id,
+
+              item.brand,
+
+              item.productName,
+
+              item.batch,
+
+              code,
+
+              createdAt,
+
+              item.imageData
+            ]
+          );
+
+        const product =
+          result.rows[0];
+
+        const qr =
+          await generateProductQR(
+            req,
+            code
+          );
+
+        createdProducts.push({
+
+          row:
+            index + 1,
+
+          product:
+            publicProduct(
+              product,
+              false
+            ),
+
+          qr: {
+
+            url:
+              qr.url,
+
+            data:
+              qr.data
+          }
+        });
+      }
+
+      await client.query(
+        "COMMIT"
+      );
+
+      res.status(201).json({
+
+        success: true,
+
+        count:
+          createdProducts.length,
+
+        products:
+          createdProducts
+      });
+
+    } catch (error) {
+
+      try {
+
+        await client.query(
+          "ROLLBACK"
+        );
+
+      } catch (
+        rollbackError
+      ) {
+
+        console.error(
+          "Bulk rollback failed:",
+          rollbackError
+        );
+      }
+
+      /*
+        PostgreSQL unique constraint
+        protection remains active even
+        if two requests somehow generate
+        the same code.
+      */
+
+      if (
+        error.code ===
+        "23505"
+      ) {
+
+        return res.status(409).json({
+
+          success: false,
+
+          error:
+            "A duplicate verification code was detected. Please retry the bulk import."
+        });
+      }
+
+      console.error(
+        "Bulk product registration failed:",
+        error
+      );
+
+      res.status(500).json({
+
+        success: false,
+
+        error:
+          "Unable to complete bulk product registration."
+      });
+
+    } finally {
+
+      client.release();
+    }
+  }
+);
+
+
+/* =========================================================
    LIST PRODUCTS
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/products",
@@ -1254,9 +1811,9 @@ app.get(
 );
 
 
-/* -----------------------------
+/* =========================================================
    GET PRODUCT IMAGE
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/products/:code/image",
@@ -1282,6 +1839,7 @@ app.get(
           `,
           [
             code,
+
             req.business.id
           ]
         );
@@ -1301,7 +1859,8 @@ app.get(
       res.json({
 
         imageData:
-          product.image_data || ""
+          product.image_data ||
+          ""
       });
 
     } catch (error) {
@@ -1318,9 +1877,9 @@ app.get(
 );
 
 
-/* -----------------------------
+/* =========================================================
    REPLACE PRODUCT IMAGE
------------------------------ */
+========================================================= */
 
 app.patch(
   "/api/products/:code/image",
@@ -1336,7 +1895,8 @@ app.patch(
 
     const {
       imageData
-    } = req.body || {};
+    } =
+      req.body || {};
 
     if (
       !validImageData(
@@ -1357,9 +1917,12 @@ app.patch(
         await pool.query(
           `
             UPDATE products
+
             SET image_data = $1
+
             WHERE code = $2
             AND business_id = $3
+
             RETURNING *
           `,
           [
@@ -1407,9 +1970,9 @@ app.patch(
 );
 
 
-/* -----------------------------
+/* =========================================================
    DELETE PRODUCT
------------------------------ */
+========================================================= */
 
 app.delete(
   "/api/products/:code",
@@ -1431,10 +1994,12 @@ app.delete(
             DELETE FROM products
             WHERE code = $1
             AND business_id = $2
+
             RETURNING id
           `,
           [
             code,
+
             req.business.id
           ]
         );
@@ -1470,9 +2035,9 @@ app.delete(
 );
 
 
-/* -----------------------------
+/* =========================================================
    CHANGE PRODUCT STATUS
------------------------------ */
+========================================================= */
 
 app.patch(
   "/api/products/:code/status",
@@ -1503,13 +2068,17 @@ app.patch(
         await pool.query(
           `
             UPDATE products
+
             SET status = $1
+
             WHERE code = $2
             AND business_id = $3
           `,
           [
             status,
+
             req.params.code,
+
             req.business.id
           ]
         );
@@ -1542,9 +2111,9 @@ app.patch(
 );
 
 
-/* -----------------------------
+/* =========================================================
    GENERATE QR CODE
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/products/:code/qr",
@@ -1563,6 +2132,7 @@ app.get(
           `,
           [
             req.params.code,
+
             req.business.id
           ]
         );
@@ -1579,30 +2149,19 @@ app.get(
         });
       }
 
-      const base =
-        process.env.PUBLIC_BASE_URL ||
-        `${req.protocol}://${req.get("host")}`;
-
-      const verifyUrl =
-        `${base}/?verify=${encodeURIComponent(
+      const qr =
+        await generateProductQR(
+          req,
           product.code
-        )}#verify`;
-
-      const data =
-        await QRCode.toDataURL(
-          verifyUrl,
-          {
-            margin: 2,
-            width: 600
-          }
         );
 
       res.json({
 
         url:
-          verifyUrl,
+          qr.url,
 
-        data
+        data:
+          qr.data
       });
 
     } catch (error) {
@@ -1619,9 +2178,9 @@ app.get(
 );
 
 
-/* -----------------------------
+/* =========================================================
    PUBLIC PRODUCT VERIFICATION
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/verify/:code",
@@ -1670,7 +2229,9 @@ app.get(
           `,
           [
             code,
+
             "not_verified",
+
             now()
           ]
         );
@@ -1745,8 +2306,10 @@ app.get(
       await pool.query(
         `
           UPDATE products
+
           SET verification_count =
             verification_count + 1
+
           WHERE id = $1
         `,
         [
@@ -1772,8 +2335,11 @@ app.get(
         `,
         [
           product.id,
+
           code,
+
           verificationResult,
+
           now()
         ]
       );
@@ -1822,9 +2388,9 @@ app.get(
 );
 
 
-/* -----------------------------
+/* =========================================================
    BUSINESS STATISTICS
------------------------------ */
+========================================================= */
 
 app.get(
   "/api/stats",
@@ -1837,7 +2403,9 @@ app.get(
         await pool.query(
           `
             SELECT COUNT(*) AS count
+
             FROM products
+
             WHERE business_id = $1
           `,
           [
@@ -1849,9 +2417,12 @@ app.get(
         await pool.query(
           `
             SELECT COUNT(*) AS count
+
             FROM verifications v
+
             JOIN products p
               ON p.id = v.product_id
+
             WHERE p.business_id = $1
           `,
           [
@@ -1863,10 +2434,14 @@ app.get(
         await pool.query(
           `
             SELECT COUNT(*) AS count
+
             FROM verifications v
+
             JOIN products p
               ON p.id = v.product_id
+
             WHERE p.business_id = $1
+
             AND v.result = 'warning'
           `,
           [
@@ -1908,7 +2483,7 @@ app.get(
 
 /* =========================================================
    OWNER CONTROL PAGE
-   ========================================================= */
+========================================================= */
 
 app.get(
   "/owner",
@@ -2188,7 +2763,8 @@ async function loadStatus() {
       await fetch(
         "/api/owner/lockdown-status",
         {
-          method: "GET",
+          method:
+            "GET",
 
           headers: {
             "x-verifyit-owner-key":
@@ -2271,7 +2847,8 @@ async function changeLock(
       await fetch(
         endpoint,
         {
-          method: "POST",
+          method:
+            "POST",
 
           headers: {
             "x-verifyit-owner-key":
@@ -2296,12 +2873,6 @@ async function changeLock(
         ? "🔒 Lockdown activated successfully."
         : "🔓 VerifyIt restored successfully.";
 
-    /*
-      Keep the key in the field so that
-      loadStatus() can immediately authenticate
-      the follow-up status request.
-    */
-
     await loadStatus();
 
   } catch (error) {
@@ -2311,7 +2882,6 @@ async function changeLock(
       error.message;
   }
 }
-
 
 </script>
 
@@ -2324,9 +2894,9 @@ async function changeLock(
 );
 
 
-/* -----------------------------
+/* =========================================================
    FRONTEND
------------------------------ */
+========================================================= */
 
 app.get(
   "*",
@@ -2343,9 +2913,9 @@ app.get(
 );
 
 
-/* -----------------------------
+/* =========================================================
    START SERVER
------------------------------ */
+========================================================= */
 
 initDatabase()
 
@@ -2360,11 +2930,10 @@ initDatabase()
           console.warn(
             "WARNING: VERIFYIT_OWNER_KEY is not configured. Owner controls will remain unavailable."
           );
-
         }
 
         console.log(
-          `VerifyIt V1.5 with Lock In Protocol running on port ${PORT}`
+          `VerifyIt V1.6.0 with Lock In Protocol running on port ${PORT}`
         );
       }
     );
