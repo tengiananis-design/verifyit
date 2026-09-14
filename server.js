@@ -9,62 +9,33 @@ import { fileURLToPath } from "url";
 
 const { Pool } = pg;
 
-const __dirname =
-  path.dirname(
-    fileURLToPath(import.meta.url)
-  );
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-const PORT =
-  process.env.PORT || 3000;
-
-const JWT_SECRET =
-  process.env.JWT_SECRET ||
-  "CHANGE_ME_IN_PRODUCTION";
-
-const OWNER_KEY =
-  process.env.VERIFYIT_OWNER_KEY || "";
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME_IN_PRODUCTION";
+const OWNER_KEY = process.env.VERIFYIT_OWNER_KEY || "";
 
 if (!process.env.DATABASE_URL) {
-
-  console.error(
-    "DATABASE_URL is not configured."
-  );
-
+  console.error("DATABASE_URL is not configured.");
   process.exit(1);
 }
 
-const pool =
-  new Pool({
-    connectionString:
-      process.env.DATABASE_URL,
-
-    ssl: {
-      rejectUnauthorized: false
-    }
-  });
-
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 /* =========================================================
    DATABASE SETUP
 ========================================================= */
 
 async function initDatabase() {
-
-  /*
-    IMPORTANT:
-    Each PostgreSQL command is executed separately.
-
-    This avoids:
-    "cannot insert multiple commands into a prepared statement"
-  */
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS businesses (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
+      email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       created_at TEXT NOT NULL
     )
@@ -77,9 +48,9 @@ async function initDatabase() {
       brand TEXT NOT NULL,
       product_name TEXT NOT NULL,
       batch TEXT DEFAULT '',
-      code TEXT NOT NULL UNIQUE,
-      status TEXT NOT NULL DEFAULT 'active',
-      verification_count INTEGER NOT NULL DEFAULT 0,
+      code TEXT UNIQUE NOT NULL,
+      status TEXT DEFAULT 'active',
+      verification_count INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       image_data TEXT DEFAULT '',
       FOREIGN KEY (business_id)
@@ -106,11 +77,6 @@ async function initDatabase() {
     ADD COLUMN IF NOT EXISTS image_data TEXT DEFAULT ''
   `);
 
-  /*
-    Persistent system settings.
-    This survives server restarts and redeployments.
-  */
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_settings (
       setting_name TEXT PRIMARY KEY,
@@ -118,10 +84,6 @@ async function initDatabase() {
       updated_at TEXT NOT NULL
     )
   `);
-
-  /*
-    Owner audit log.
-  */
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS owner_audit_log (
@@ -132,347 +94,166 @@ async function initDatabase() {
     )
   `);
 
-  /*
-    Create the default lockdown state only if
-    it does not already exist.
-
-    IMPORTANT:
-    ON CONFLICT DO NOTHING preserves
-    the existing lockdown state.
-  */
-
-  await pool.query(
-    `
-      INSERT INTO system_settings
-      (
-        setting_name,
-        setting_value,
-        updated_at
-      )
-      VALUES ($1, $2, $3)
-
-      ON CONFLICT (setting_name)
-      DO NOTHING
-    `,
-    [
-      "verifyit_lockdown",
-      "false",
-      now()
-    ]
-  );
-
-  console.log(
-    "VerifyIt PostgreSQL database ready."
-  );
+  await pool.query(`
+    INSERT INTO system_settings
+      (setting_name, setting_value, updated_at)
+    VALUES
+      ('verifyit_lockdown', 'false', $1)
+    ON CONFLICT (setting_name) DO NOTHING
+  `, [now()]);
 }
 
-
 /* =========================================================
-   TIME
+   BASIC HELPERS
 ========================================================= */
 
 function now() {
-
   return new Date().toISOString();
 }
 
-
 /* =========================================================
-   LOCKDOWN HELPERS
+   VERIFYIT LOCK IN PROTOCOL
 ========================================================= */
 
 async function getLockdownState() {
+  const result = await pool.query(`
+    SELECT setting_value
+    FROM system_settings
+    WHERE setting_name = 'verifyit_lockdown'
+    LIMIT 1
+  `);
 
-  const result =
-    await pool.query(
-      `
-        SELECT setting_value
-        FROM system_settings
-        WHERE setting_name = $1
-      `,
-      [
-        "verifyit_lockdown"
-      ]
-    );
-
-  if (!result.rows[0]) {
-
-    throw new Error(
-      "Lockdown state is unavailable."
-    );
+  if (!result.rows.length) {
+    throw new Error("Lockdown state is unavailable.");
   }
 
-  return (
-    result.rows[0].setting_value ===
-    "true"
-  );
+  return result.rows[0].setting_value === "true";
 }
 
-
-async function setLockdownState(
-  locked
-) {
-
-  await pool.query(
-    `
-      INSERT INTO system_settings
-      (
-        setting_name,
-        setting_value,
-        updated_at
-      )
-      VALUES ($1, $2, $3)
-
-      ON CONFLICT (setting_name)
-      DO UPDATE SET
-        setting_value =
-          EXCLUDED.setting_value,
-
-        updated_at =
-          EXCLUDED.updated_at
-    `,
-    [
-      "verifyit_lockdown",
-
-      locked
-        ? "true"
-        : "false",
-
-      now()
-    ]
-  );
+async function setLockdownState(locked) {
+  await pool.query(`
+    INSERT INTO system_settings
+      (setting_name, setting_value, updated_at)
+    VALUES
+      ('verifyit_lockdown', $1, $2)
+    ON CONFLICT (setting_name)
+    DO UPDATE SET
+      setting_value = EXCLUDED.setting_value,
+      updated_at = EXCLUDED.updated_at
+  `, [locked ? "true" : "false", now()]);
 }
 
-
-async function writeOwnerAudit(
-  action,
-  result
-) {
-
+async function writeOwnerAudit(action, result) {
   try {
-
-    await pool.query(
-      `
-        INSERT INTO owner_audit_log
-        (
-          action,
-          result,
-          created_at
-        )
-        VALUES ($1, $2, $3)
-      `,
-      [
-        action,
-        result,
-        now()
-      ]
-    );
-
+    await pool.query(`
+      INSERT INTO owner_audit_log
+        (action, result, created_at)
+      VALUES
+        ($1, $2, $3)
+    `, [action, result, now()]);
   } catch (error) {
-
-    console.error(
-      "Owner audit logging failed:",
-      error
-    );
+    console.error("Owner audit log failed:", error.message);
   }
 }
 
-
-/* =========================================================
-   OWNER KEY SECURITY
-========================================================= */
-
-function safeOwnerKeyCompare(
-  providedKey
-) {
-
-  if (!OWNER_KEY) {
+function safeOwnerKeyCompare(providedKey) {
+  if (!providedKey || !OWNER_KEY) {
     return false;
   }
 
-  if (
-    typeof providedKey !==
-    "string"
-  ) {
+  const providedBuffer = Buffer.from(String(providedKey));
+  const ownerBuffer = Buffer.from(String(OWNER_KEY));
+
+  if (providedBuffer.length !== ownerBuffer.length) {
     return false;
   }
 
-  const providedBuffer =
-    Buffer.from(
-      providedKey,
-      "utf8"
-    );
-
-  const ownerBuffer =
-    Buffer.from(
-      OWNER_KEY,
-      "utf8"
-    );
-
-  if (
-    providedBuffer.length !==
-    ownerBuffer.length
-  ) {
-    return false;
-  }
-
-  return crypto.timingSafeEqual(
-    providedBuffer,
-    ownerBuffer
-  );
+  return crypto.timingSafeEqual(providedBuffer, ownerBuffer);
 }
 
-
-/* =========================================================
-   OWNER AUTHENTICATION
-========================================================= */
-
-function ownerAuth(
-  req,
-  res,
-  next
-) {
+async function ownerAuth(req, res, next) {
+  const providedKey = req.header("x-verifyit-owner-key");
 
   if (!OWNER_KEY) {
+    await writeOwnerAudit("owner_auth", "failed_owner_key_not_configured");
 
     return res.status(503).json({
-
       success: false,
-
-      error:
-        "Owner controls are not configured."
+      error: "Owner authentication is not configured."
     });
   }
 
-  const providedKey =
-    req.headers[
-      "x-verifyit-owner-key"
-    ];
-
-  if (
-    !safeOwnerKeyCompare(
-      providedKey
-    )
-  ) {
-
-    writeOwnerAudit(
-      "OWNER_AUTH",
-      "FAILED"
-    );
+  if (!safeOwnerKeyCompare(providedKey)) {
+    await writeOwnerAudit("owner_auth", "failed_invalid_key");
 
     return res.status(401).json({
-
       success: false,
-
-      error:
-        "Owner authentication failed."
+      error: "Invalid owner key."
     });
   }
 
-  req.isVerifyItOwner =
-    true;
+  req.isVerifyItOwner = true;
+
+  await writeOwnerAudit("owner_auth", "success");
 
   next();
 }
 
-
-/* =========================================================
-   LOCKDOWN MIDDLEWARE
-========================================================= */
-
-async function lockdownMiddleware(
-  req,
-  res,
-  next
-) {
-
+async function lockdownMiddleware(req, res, next) {
   /*
-    Owner-authenticated requests
-    are always allowed through.
+    Owner-authenticated requests bypass lockdown.
   */
-
   if (req.isVerifyItOwner) {
-
     return next();
   }
 
   try {
-
-    const locked =
-      await getLockdownState();
+    const locked = await getLockdownState();
 
     if (locked) {
-
       return res.status(503).json({
-
         success: false,
-
         locked: true,
-
-        error:
-          "VerifyIt is currently under lockdown."
+        error: "VerifyIt is currently under lockdown."
       });
     }
 
     next();
-
   } catch (error) {
-
-    console.error(
-      "Unable to determine lockdown state:",
-      error
-    );
+    console.error("Unable to determine lockdown state:", error.message);
 
     /*
-      FAIL SAFE:
-      If lockdown state cannot be determined,
-      protected operations are blocked.
+      FAIL-SAFE:
+      If VerifyIt cannot determine its lockdown state,
+      protected API operations are blocked.
     */
-
     return res.status(503).json({
-
       success: false,
-
       locked: true,
-
-      error:
-        "VerifyIt is temporarily unavailable."
+      error: "VerifyIt is temporarily unavailable."
     });
   }
 }
 
-
 /* =========================================================
-   CODE GENERATOR
+   PRODUCT CODE
 ========================================================= */
 
-async function makeCode(
-  database = pool
-) {
-
+async function makeCode(db = pool) {
   let code;
 
   do {
-
-    code =
-      crypto
-        .randomBytes(8)
-        .toString("hex")
-        .toUpperCase()
-        .match(/.{1,4}/g)
-        .join("-");
-
+    code = crypto
+      .randomBytes(8)
+      .toString("hex")
+      .toUpperCase()
+      .match(/.{1,4}/g)
+      .join("-");
   } while (
     (
-      await database.query(
-        `
-          SELECT 1
-          FROM products
-          WHERE code = $1
-        `,
-        [
-          code
-        ]
+      await db.query(
+        "SELECT 1 FROM products WHERE code = $1",
+        [code]
       )
     ).rowCount
   );
@@ -480,224 +261,113 @@ async function makeCode(
   return code;
 }
 
-
-/* =========================================================
-   VERIFY URL
-========================================================= */
-
-function getVerifyUrl(
-  req,
-  code
-) {
-
-  const base =
-    process.env.PUBLIC_BASE_URL ||
-    `${req.protocol}://${req.get("host")}`;
-
-  return (
-    `${base}/?verify=` +
-    `${encodeURIComponent(code)}` +
-    "#verify"
-  );
-}
-
-
-/* =========================================================
-   QR GENERATOR
-========================================================= */
-
-async function generateProductQR(
-  req,
-  code
-) {
-
-  const verifyUrl =
-    getVerifyUrl(
-      req,
-      code
-    );
-
-  const data =
-    await QRCode.toDataURL(
-      verifyUrl,
-      {
-        margin: 2,
-        width: 600
-      }
-    );
-
-  return {
-    url:
-      verifyUrl,
-
-    data
-  };
-}
-
-
 /* =========================================================
    JWT
 ========================================================= */
 
-function tokenFor(
-  business
-) {
-
+function tokenFor(business) {
   return jwt.sign(
     {
-      id:
-        business.id,
-
-      email:
-        business.email
+      id: business.id,
+      email: business.email
     },
-
     JWT_SECRET,
-
     {
-      expiresIn:
-        "7d"
+      expiresIn: "7d"
     }
   );
 }
 
-
 /* =========================================================
-   BUSINESS AUTH
+   AUTH MIDDLEWARE
 ========================================================= */
 
-function auth(
-  req,
-  res,
-  next
-) {
+function auth(req, res, next) {
+  const header = req.headers.authorization || "";
+
+  if (!header.startsWith("Bearer ")) {
+    return res.status(401).json({
+      success: false,
+      error: "Please log in."
+    });
+  }
+
+  const token = header.slice(7);
 
   try {
-
-    const header =
-      req.headers.authorization ||
-      "";
-
-    if (
-      !header.startsWith(
-        "Bearer "
-      )
-    ) {
-
-      throw new Error(
-        "Missing token"
-      );
-    }
-
-    req.business =
-      jwt.verify(
-        header.slice(7),
-        JWT_SECRET
-      );
-
+    req.business = jwt.verify(token, JWT_SECRET);
     next();
-
   } catch {
-
-    res.status(401).json({
-
-      error:
-        "Please log in."
+    return res.status(401).json({
+      success: false,
+      error: "Please log in."
     });
   }
 }
 
-
 /* =========================================================
-   PUBLIC PRODUCT DATA
+   PUBLIC PRODUCT FORMAT
 ========================================================= */
 
-function publicProduct(
-  product,
-  includeImage = false
-) {
-
-  const result = {
-
-    brand:
-      product.brand,
-
-    productName:
-      product.product_name,
-
-    batch:
-      product.batch,
-
-    code:
-      product.code,
-
-    status:
-      product.status,
-
-    verificationCount:
-      Number(
-        product.verification_count
-      ),
-
-    createdAt:
-      product.created_at
+function publicProduct(product, includeImage = false) {
+  const data = {
+    brand: product.brand,
+    productName: product.product_name,
+    batch: product.batch || "",
+    code: product.code,
+    status: product.status,
+    verificationCount: Number(product.verification_count || 0),
+    createdAt: product.created_at
   };
 
   if (includeImage) {
-
-    result.imageData =
-      product.image_data ||
-      "";
+    data.imageData = product.image_data || "";
   }
 
-  return result;
+  return data;
 }
-
 
 /* =========================================================
    IMAGE VALIDATION
 ========================================================= */
 
-function validImageData(
-  imageData
-) {
-
+function validImageData(imageData) {
   if (!imageData) {
     return true;
   }
 
-  if (
-    typeof imageData !==
-    "string"
-  ) {
+  if (typeof imageData !== "string") {
     return false;
   }
 
-  const validPrefix =
-    /^data:image\/(jpeg|jpg|png|webp);base64,/i;
+  const validFormat =
+    /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(imageData);
 
-  if (
-    !validPrefix.test(
-      imageData
-    )
-  ) {
+  if (!validFormat) {
     return false;
   }
 
   /*
-    Keep the prototype reasonably small.
+    Keep image payloads controlled.
   */
-
-  if (
-    imageData.length >
-    1500000
-  ) {
+  if (imageData.length > 1500000) {
     return false;
   }
 
   return true;
 }
 
+/* =========================================================
+   VERIFICATION URL
+========================================================= */
+
+function getVerificationUrl(req, code) {
+  const base =
+    process.env.PUBLIC_BASE_URL ||
+    `${req.protocol}://${req.get("host")}`;
+
+  return `${base}/?verify=${encodeURIComponent(code)}#verify`;
+}
 
 /* =========================================================
    EXPRESS
@@ -705,166 +375,112 @@ function validImageData(
 
 app.use(
   express.json({
-    limit: "2mb"
+    limit: "5mb"
   })
 );
 
 app.use(
   express.static(
-    path.join(
-      __dirname,
-      "public"
-    )
+    path.join(__dirname, "public")
   )
 );
 
-
 /* =========================================================
-   HEALTH CHECK
+   HEALTH
 ========================================================= */
 
-app.get(
-  "/api/health",
-  async (_req, res) => {
+app.get("/api/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+
+    let locked = true;
 
     try {
-
-      await pool.query(
-        "SELECT 1"
-      );
-
-      let locked =
-        false;
-
-      try {
-
-        locked =
-          await getLockdownState();
-
-      } catch {
-
-        locked =
-          true;
-      }
-
-      res.json({
-
-        ok: true,
-
-        service:
-          "VerifyIt",
-
-        version:
-          "1.6.0",
-
-        database:
-          "postgresql",
-
-        lockdown:
-          locked
-      });
-
+      locked = await getLockdownState();
     } catch {
-
-      res.status(500).json({
-
-        ok: false,
-
-        error:
-          "Database connection failed."
-      });
+      locked = true;
     }
-  }
-);
 
+    res.json({
+      ok: true,
+      service: "VerifyIt",
+      version: "1.6.0",
+      database: "postgresql",
+      lockdown: locked
+    });
+  } catch (error) {
+    console.error("Health check failed:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      service: "VerifyIt",
+      error: "Database connection failed."
+    });
+  }
+});
 
 /* =========================================================
-   OWNER STATUS
+   OWNER LOCKDOWN STATUS
+   Owner routes are intentionally BEFORE lockdown middleware.
 ========================================================= */
 
 app.get(
   "/api/owner/lockdown-status",
   ownerAuth,
   async (_req, res) => {
-
     try {
-
-      const locked =
-        await getLockdownState();
+      const locked = await getLockdownState();
 
       res.json({
-
         success: true,
-
-        locked
+        lockdown: locked
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error("Lockdown status error:", error.message);
 
       res.status(503).json({
-
         success: false,
-
-        error:
-          "Unable to determine lockdown state."
+        error: "Unable to determine lockdown state."
       });
     }
   }
 );
 
-
 /* =========================================================
-   OWNER LOCK
+   OWNER LOCKDOWN
 ========================================================= */
 
 app.post(
   "/api/owner/lockdown",
   ownerAuth,
   async (_req, res) => {
-
     try {
-
-      await setLockdownState(
-        true
-      );
+      await setLockdownState(true);
 
       await writeOwnerAudit(
-        "LOCKDOWN",
-        "SUCCESS"
+        "lockdown",
+        "success"
       );
 
       res.json({
-
         success: true,
-
-        locked: true,
-
-        message:
-          "VerifyIt lockdown activated."
+        lockdown: true
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error("Lockdown failed:", error.message);
 
       await writeOwnerAudit(
-        "LOCKDOWN",
-        "FAILED"
+        "lockdown",
+        "failed"
       );
 
       res.status(500).json({
-
         success: false,
-
-        error:
-          "Unable to activate lockdown."
+        error: "Unable to activate lockdown."
       });
     }
   }
 );
-
 
 /* =========================================================
    OWNER UNLOCK
@@ -874,48 +490,33 @@ app.post(
   "/api/owner/unlock",
   ownerAuth,
   async (_req, res) => {
-
     try {
-
-      await setLockdownState(
-        false
-      );
+      await setLockdownState(false);
 
       await writeOwnerAudit(
-        "UNLOCK",
-        "SUCCESS"
+        "unlock",
+        "success"
       );
 
       res.json({
-
         success: true,
-
-        locked: false,
-
-        message:
-          "VerifyIt lockdown deactivated."
+        lockdown: false
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error("Unlock failed:", error.message);
 
       await writeOwnerAudit(
-        "UNLOCK",
-        "FAILED"
+        "unlock",
+        "failed"
       );
 
       res.status(500).json({
-
         success: false,
-
-        error:
-          "Unable to deactivate lockdown."
+        error: "Unable to deactivate lockdown."
       });
     }
   }
 );
-
 
 /* =========================================================
    OWNER AUDIT LOG
@@ -925,49 +526,36 @@ app.get(
   "/api/owner/audit-log",
   ownerAuth,
   async (_req, res) => {
-
     try {
-
-      const result =
-        await pool.query(
-          `
-            SELECT
-              id,
-              action,
-              result,
-              created_at
-            FROM owner_audit_log
-            ORDER BY id DESC
-            LIMIT 100
-          `
-        );
+      const result = await pool.query(`
+        SELECT
+          id,
+          action,
+          result,
+          created_at
+        FROM owner_audit_log
+        ORDER BY id DESC
+        LIMIT 200
+      `);
 
       res.json({
-
         success: true,
-
-        logs:
-          result.rows
+        logs: result.rows
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error("Audit log error:", error.message);
 
       res.status(500).json({
-
         success: false,
-
-        error:
-          "Unable to load audit log."
+        error: "Unable to load audit log."
       });
     }
   }
 );
 
-
 /* =========================================================
-   LOCKDOWN PROTECTION
+   LOCKDOWN MIDDLEWARE
+   Everything below this point is protected.
 ========================================================= */
 
 app.use(
@@ -975,198 +563,153 @@ app.use(
   lockdownMiddleware
 );
 
-
 /* =========================================================
-   BUSINESS REGISTRATION
+   REGISTER
 ========================================================= */
 
-app.post(
-  "/api/register",
-  async (req, res) => {
-
+app.post("/api/register", async (req, res) => {
+  try {
     const {
       name,
       email,
       password
-    } =
-      req.body || {};
+    } = req.body || {};
 
-    if (
-      !name ||
-      !email ||
-      !password ||
-      password.length < 8
-    ) {
+    const cleanName = String(name || "").trim();
+    const cleanEmail = String(email || "").trim().toLowerCase();
 
+    if (!cleanName) {
       return res.status(400).json({
-
-        error:
-          "Name, email and a password of at least 8 characters are required."
+        success: false,
+        error: "Business name is required."
       });
     }
 
-    try {
-
-      const hash =
-        await bcrypt.hash(
-          password,
-          12
-        );
-
-      const result =
-        await pool.query(
-          `
-            INSERT INTO businesses
-            (
-              name,
-              email,
-              password_hash,
-              created_at
-            )
-            VALUES
-            ($1, $2, $3, $4)
-
-            RETURNING
-              id,
-              name,
-              email
-          `,
-          [
-            String(name)
-              .trim(),
-
-            String(email)
-              .trim()
-              .toLowerCase(),
-
-            hash,
-
-            now()
-          ]
-        );
-
-      const business =
-        result.rows[0];
-
-      res.status(201).json({
-
-        token:
-          tokenFor(
-            business
-          ),
-
-        business
-      });
-
-    } catch (error) {
-
-      if (
-        error.code ===
-        "23505"
-      ) {
-
-        return res.status(409).json({
-
-          error:
-            "That email is already registered."
-        });
-      }
-
-      console.error(error);
-
-      res.status(500).json({
-
-        error:
-          "Unable to create account."
+    if (!cleanEmail) {
+      return res.status(400).json({
+        success: false,
+        error: "Email is required."
       });
     }
+
+    if (!password || String(password).length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: "Password must be at least 8 characters."
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(
+      String(password),
+      12
+    );
+
+    const result = await pool.query(
+      `
+        INSERT INTO businesses
+          (name, email, password_hash, created_at)
+        VALUES
+          ($1, $2, $3, $4)
+        RETURNING id, name, email, created_at
+      `,
+      [
+        cleanName,
+        cleanEmail,
+        passwordHash,
+        now()
+      ]
+    );
+
+    const business = result.rows[0];
+
+    res.status(201).json({
+      success: true,
+      token: tokenFor(business),
+      business
+    });
+  } catch (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        error: "Email is already registered."
+      });
+    }
+
+    console.error("Registration error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      error: "Unable to create business account."
+    });
   }
-);
-
+});
 
 /* =========================================================
-   BUSINESS LOGIN
+   LOGIN
 ========================================================= */
 
-app.post(
-  "/api/login",
-  async (req, res) => {
-
+app.post("/api/login", async (req, res) => {
+  try {
     const {
       email,
       password
-    } =
-      req.body || {};
+    } = req.body || {};
 
-    try {
+    const cleanEmail =
+      String(email || "")
+        .trim()
+        .toLowerCase();
 
-      const result =
-        await pool.query(
-          `
-            SELECT *
-            FROM businesses
-            WHERE email = $1
-          `,
-          [
-            String(email || "")
-              .trim()
-              .toLowerCase()
-          ]
-        );
+    const result = await pool.query(
+      `
+        SELECT *
+        FROM businesses
+        WHERE LOWER(email) = $1
+        LIMIT 1
+      `,
+      [cleanEmail]
+    );
 
-      const business =
-        result.rows[0];
-
-      if (
-        !business ||
-        !(
-          await bcrypt.compare(
-            String(password || ""),
-            business.password_hash
-          )
-        )
-      ) {
-
-        return res.status(401).json({
-
-          error:
-            "Invalid email or password."
-        });
-      }
-
-      res.json({
-
-        token:
-          tokenFor(
-            business
-          ),
-
-        business: {
-
-          id:
-            business.id,
-
-          name:
-            business.name,
-
-          email:
-            business.email
-        }
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-
-        error:
-          "Unable to log in."
+    if (!result.rows.length) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid email or password."
       });
     }
-  }
-);
 
+    const business = result.rows[0];
+
+    const validPassword =
+      await bcrypt.compare(
+        String(password || ""),
+        business.password_hash
+      );
+
+    if (!validPassword) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid email or password."
+      });
+    }
+
+    res.json({
+      success: true,
+      token: tokenFor(business),
+      business: {
+        id: business.id,
+        name: business.name,
+        email: business.email
+      }
+    });
+  } catch (error) {
+    console.error("Login error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      error: "Unable to log in."
+    });
+  }
+});
 
 /* =========================================================
    CURRENT BUSINESS
@@ -1176,442 +719,230 @@ app.get(
   "/api/me",
   auth,
   async (req, res) => {
-
     try {
+      const result = await pool.query(
+        `
+          SELECT
+            id,
+            name,
+            email,
+            created_at
+          FROM businesses
+          WHERE id = $1
+          LIMIT 1
+        `,
+        [req.business.id]
+      );
 
-      const result =
-        await pool.query(
-          `
-            SELECT
-              id,
-              name,
-              email,
-              created_at
-            FROM businesses
-            WHERE id = $1
-          `,
-          [
-            req.business.id
-          ]
-        );
-
-      if (!result.rows[0]) {
-
+      if (!result.rows.length) {
         return res.status(404).json({
-
-          error:
-            "Business not found."
+          success: false,
+          error: "Business account not found."
         });
       }
 
-      res.json(
-        result.rows[0]
-      );
-
+      res.json(result.rows[0]);
     } catch (error) {
-
-      console.error(error);
+      console.error("Current business error:", error.message);
 
       res.status(500).json({
-
-        error:
-          "Unable to load account."
+        success: false,
+        error: "Unable to load business account."
       });
     }
   }
 );
 
-
 /* =========================================================
-   CREATE SINGLE PRODUCT
+   SINGLE PRODUCT REGISTRATION
 ========================================================= */
 
 app.post(
   "/api/products",
   auth,
   async (req, res) => {
-
-    const {
-      brand,
-      productName,
-      batch,
-      imageData
-    } =
-      req.body || {};
-
-    if (
-      !brand ||
-      !productName
-    ) {
-
-      return res.status(400).json({
-
-        error:
-          "Brand and product name are required."
-      });
-    }
-
-    if (
-      !validImageData(
-        imageData
-      )
-    ) {
-
-      return res.status(400).json({
-
-        error:
-          "Invalid or oversized product image."
-      });
-    }
-
     try {
+      const {
+        brand,
+        productName,
+        batch,
+        imageData
+      } = req.body || {};
 
-      const code =
-        await makeCode();
+      const cleanBrand =
+        String(brand || "").trim();
 
-      const createdAt =
-        now();
+      const cleanProductName =
+        String(productName || "").trim();
 
-      const result =
-        await pool.query(
-          `
-            INSERT INTO products
+      const cleanBatch =
+        String(batch || "").trim();
+
+      if (!cleanBrand) {
+        return res.status(400).json({
+          success: false,
+          error: "Brand is required."
+        });
+      }
+
+      if (!cleanProductName) {
+        return res.status(400).json({
+          success: false,
+          error: "Product name is required."
+        });
+      }
+
+      if (!validImageData(imageData)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid or oversized image."
+        });
+      }
+
+      const code = await makeCode();
+
+      const result = await pool.query(
+        `
+          INSERT INTO products
             (
               business_id,
               brand,
               product_name,
               batch,
               code,
+              status,
+              verification_count,
               created_at,
               image_data
             )
-            VALUES
-            ($1, $2, $3, $4, $5, $6, $7)
+          VALUES
+            ($1, $2, $3, $4, $5, 'active', 0, $6, $7)
+          RETURNING *
+        `,
+        [
+          req.business.id,
+          cleanBrand,
+          cleanProductName,
+          cleanBatch,
+          code,
+          now(),
+          imageData || ""
+        ]
+      );
 
-            RETURNING *
-          `,
-          [
-            req.business.id,
-
-            String(brand)
-              .trim(),
-
-            String(productName)
-              .trim(),
-
-            String(batch || "")
-              .trim(),
-
-            code,
-
-            createdAt,
-
-            String(
-              imageData || ""
-            )
-          ]
-        );
-
-      res.status(201).json(
-
-        publicProduct(
+      res.status(201).json({
+        success: true,
+        product: publicProduct(
           result.rows[0],
           true
         )
-
+      });
+    } catch (error) {
+      console.error(
+        "Product registration error:",
+        error.message
       );
 
-    } catch (error) {
-
-      console.error(error);
-
       res.status(500).json({
-
-        error:
-          "Unable to register product."
+        success: false,
+        error: "Unable to register product."
       });
     }
   }
 );
 
-
 /* =========================================================
    V1.6 BULK PRODUCT REGISTRATION
 ========================================================= */
-
-/*
-  Expected request:
-
-  POST /api/products/bulk
-
-  {
-    "products": [
-      {
-        "brand": "Brand A",
-        "productName": "Product A",
-        "batch": "BATCH-001"
-      },
-      {
-        "brand": "Brand A",
-        "productName": "Product B",
-        "batch": "BATCH-002"
-      }
-    ]
-  }
-
-  The operation is transactional.
-
-  If ANY row is invalid, NO products are
-  inserted.
-
-  Every successfully inserted product
-  receives:
-
-  - unique VerifyIt code
-  - active status
-  - automatic QR code
-  - verification URL
-*/
 
 app.post(
   "/api/products/bulk",
   auth,
   async (req, res) => {
-
-    const incoming =
-      req.body?.products;
-
-    if (
-      !Array.isArray(
-        incoming
-      )
-    ) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        error:
-          "A products array is required."
-      });
-    }
-
-    if (
-      incoming.length === 0
-    ) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        error:
-          "At least one product is required."
-      });
-    }
-
-    /*
-      Protect the server from enormous
-      requests during the prototype stage.
-    */
-
-    if (
-      incoming.length > 100
-    ) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        error:
-          "A maximum of 100 products can be imported at once."
-      });
-    }
-
-    /*
-      Validate everything BEFORE opening
-      the database transaction.
-    */
-
-    const errors = [];
-
-    const normalized =
-      incoming.map(
-        (item, index) => {
-
-          const row =
-            item &&
-            typeof item === "object"
-              ? item
-              : {};
-
-          const brand =
-            String(
-              row.brand || ""
-            ).trim();
-
-          const productName =
-            String(
-              row.productName ||
-              row.product ||
-              row.name ||
-              ""
-            ).trim();
-
-          const batch =
-            String(
-              row.batch || ""
-            ).trim();
-
-          const imageData =
-            row.imageData ||
-            "";
-
-          const rowErrors = [];
-
-          if (!brand) {
-
-            rowErrors.push(
-              "Brand is required."
-            );
-          }
-
-          if (!productName) {
-
-            rowErrors.push(
-              "Product name is required."
-            );
-          }
-
-          if (
-            brand.length > 500
-          ) {
-
-            rowErrors.push(
-              "Brand is too long."
-            );
-          }
-
-          if (
-            productName.length > 500
-          ) {
-
-            rowErrors.push(
-              "Product name is too long."
-            );
-          }
-
-          if (
-            batch.length > 500
-          ) {
-
-            rowErrors.push(
-              "Batch is too long."
-            );
-          }
-
-          /*
-            Bulk import currently supports
-            imageData if supplied, but the
-            initial CSV/Excel interface will
-            normally leave it empty.
-          */
-
-          if (
-            imageData &&
-            !validImageData(
-              imageData
-            )
-          ) {
-
-            rowErrors.push(
-              "Invalid or oversized product image."
-            );
-          }
-
-          if (
-            rowErrors.length
-          ) {
-
-            errors.push({
-
-              row:
-                index + 1,
-
-              errors:
-                rowErrors
-            });
-          }
-
-          return {
-
-            brand,
-
-            productName,
-
-            batch,
-
-            imageData:
-              String(
-                imageData || ""
-              )
-          };
-        }
-      );
-
-    /*
-      Reject the entire batch if any
-      row failed validation.
-    */
-
-    if (
-      errors.length
-    ) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        error:
-          "Bulk import validation failed.",
-
-        rowErrors:
-          errors
-      });
-    }
-
-    const client =
-      await pool.connect();
-
-    const createdProducts =
-      [];
+    const client = await pool.connect();
 
     try {
+      const products = req.body?.products;
 
-      await client.query(
-        "BEGIN"
-      );
+      if (!Array.isArray(products)) {
+        return res.status(400).json({
+          success: false,
+          error: "products must be an array."
+        });
+      }
 
-      for (
-        let index = 0;
-        index < normalized.length;
-        index++
-      ) {
+      if (products.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "No products were provided."
+        });
+      }
 
-        const item =
-          normalized[index];
+      /*
+        V1.6 limit:
+        50 products per import.
+      */
+      if (products.length > 50) {
+        return res.status(400).json({
+          success: false,
+          error: "A maximum of 50 products can be imported at once."
+        });
+      }
 
-        const code =
-          await makeCode(
-            client
-          );
+      /*
+        Validate every row BEFORE starting the transaction.
+        This prevents partially valid imports.
+      */
+      const validatedProducts = [];
 
-        const createdAt =
-          now();
+      for (let index = 0; index < products.length; index++) {
+        const item = products[index] || {};
 
-        const result =
-          await client.query(
-            `
-              INSERT INTO products
+        const brand =
+          String(item.brand || "").trim();
+
+        const productName =
+          String(item.productName || "").trim();
+
+        const batch =
+          String(item.batch || "").trim();
+
+        if (!brand) {
+          return res.status(400).json({
+            success: false,
+            error: `Row ${index + 1}: Brand is required.`
+          });
+        }
+
+        if (!productName) {
+          return res.status(400).json({
+            success: false,
+            error: `Row ${index + 1}: Product name is required.`
+          });
+        }
+
+        /*
+          Bulk import intentionally does not accept
+          imageData in V1.6.
+        */
+        validatedProducts.push({
+          brand,
+          productName,
+          batch
+        });
+      }
+
+      await client.query("BEGIN");
+
+      const createdProducts = [];
+
+      for (const item of validatedProducts) {
+        const code = await makeCode(client);
+        const createdAt = now();
+
+        const result = await client.query(
+          `
+            INSERT INTO products
               (
                 business_id,
                 brand,
@@ -1623,352 +954,224 @@ app.post(
                 created_at,
                 image_data
               )
-              VALUES
-              (
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                'active',
-                0,
-                $6,
-                $7
-              )
+            VALUES
+              ($1, $2, $3, $4, $5, 'active', 0, $6, '')
+            RETURNING *
+          `,
+          [
+            req.business.id,
+            item.brand,
+            item.productName,
+            item.batch,
+            code,
+            createdAt
+          ]
+        );
 
-              RETURNING *
-            `,
-            [
-              req.business.id,
+        const product = result.rows[0];
 
-              item.brand,
-
-              item.productName,
-
-              item.batch,
-
-              code,
-
-              createdAt,
-
-              item.imageData
-            ]
+        /*
+          Automatic QR generation.
+        */
+        const verifyUrl =
+          getVerificationUrl(
+            req,
+            product.code
           );
 
-        const product =
-          result.rows[0];
-
-        const qr =
-          await generateProductQR(
-            req,
-            code
+        const qrData =
+          await QRCode.toDataURL(
+            verifyUrl,
+            {
+              margin: 2,
+              width: 600
+            }
           );
 
         createdProducts.push({
-
-          row:
-            index + 1,
-
-          product:
-            publicProduct(
-              product,
-              false
-            ),
-
-          qr: {
-
-            url:
-              qr.url,
-
-            data:
-              qr.data
-          }
+          ...publicProduct(product, false),
+          qrUrl: verifyUrl,
+          qrData
         });
       }
 
-      await client.query(
-        "COMMIT"
-      );
+      await client.query("COMMIT");
 
       res.status(201).json({
-
         success: true,
-
-        count:
-          createdProducts.length,
-
-        products:
-          createdProducts
+        count: createdProducts.length,
+        products: createdProducts
       });
-
     } catch (error) {
-
       try {
-
-        await client.query(
-          "ROLLBACK"
-        );
-
-      } catch (
-        rollbackError
-      ) {
-
-        console.error(
-          "Bulk rollback failed:",
-          rollbackError
-        );
-      }
-
-      /*
-        PostgreSQL unique constraint
-        protection remains active even
-        if two requests somehow generate
-        the same code.
-      */
-
-      if (
-        error.code ===
-        "23505"
-      ) {
-
-        return res.status(409).json({
-
-          success: false,
-
-          error:
-            "A duplicate verification code was detected. Please retry the bulk import."
-        });
-      }
+        await client.query("ROLLBACK");
+      } catch {}
 
       console.error(
-        "Bulk product registration failed:",
-        error
+        "Bulk product import error:",
+        error.message
       );
 
       res.status(500).json({
-
         success: false,
-
-        error:
-          "Unable to complete bulk product registration."
+        error: "Bulk product import failed. No products were saved."
       });
-
     } finally {
-
       client.release();
     }
   }
 );
 
-
 /* =========================================================
-   LIST PRODUCTS
+   PRODUCT CATALOG
 ========================================================= */
 
 app.get(
   "/api/products",
   auth,
   async (req, res) => {
-
     try {
-
-      const result =
-        await pool.query(
-          `
-            SELECT *
-            FROM products
-            WHERE business_id = $1
-            ORDER BY id DESC
-          `,
-          [
-            req.business.id
-          ]
-        );
-
-      res.json(
-
-        result.rows.map(
-          product =>
-            publicProduct(
-              product,
-              false
-            )
-        )
-
+      const result = await pool.query(
+        `
+          SELECT *
+          FROM products
+          WHERE business_id = $1
+          ORDER BY id DESC
+        `,
+        [req.business.id]
       );
 
+      res.json({
+        success: true,
+        products: result.rows.map(
+          product => publicProduct(product, false)
+        )
+      });
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "Product catalog error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to load products."
+        success: false,
+        error: "Unable to load products."
       });
     }
   }
 );
 
-
 /* =========================================================
-   GET PRODUCT IMAGE
+   PRODUCT IMAGE
 ========================================================= */
 
 app.get(
   "/api/products/:code/image",
   auth,
   async (req, res) => {
-
-    const code =
-      String(
-        req.params.code || ""
-      )
-        .trim()
-        .toUpperCase();
-
     try {
-
-      const result =
-        await pool.query(
-          `
-            SELECT image_data
-            FROM products
-            WHERE code = $1
+      const result = await pool.query(
+        `
+          SELECT image_data
+          FROM products
+          WHERE code = $1
             AND business_id = $2
-          `,
-          [
-            code,
+          LIMIT 1
+        `,
+        [
+          req.params.code,
+          req.business.id
+        ]
+      );
 
-            req.business.id
-          ]
-        );
-
-      const product =
-        result.rows[0];
-
-      if (!product) {
-
+      if (!result.rows.length) {
         return res.status(404).json({
-
-          error:
-            "Product not found."
+          success: false,
+          error: "Product not found."
         });
       }
 
       res.json({
-
+        success: true,
         imageData:
-          product.image_data ||
-          ""
+          result.rows[0].image_data || ""
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "Product image error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to load product image."
+        success: false,
+        error: "Unable to load product image."
       });
     }
   }
 );
 
-
 /* =========================================================
-   REPLACE PRODUCT IMAGE
+   UPDATE PRODUCT IMAGE
 ========================================================= */
 
 app.patch(
   "/api/products/:code/image",
   auth,
   async (req, res) => {
-
-    const code =
-      String(
-        req.params.code || ""
-      )
-        .trim()
-        .toUpperCase();
-
-    const {
-      imageData
-    } =
-      req.body || {};
-
-    if (
-      !validImageData(
-        imageData
-      )
-    ) {
-
-      return res.status(400).json({
-
-        error:
-          "Invalid or oversized product image."
-      });
-    }
-
     try {
+      const {
+        imageData
+      } = req.body || {};
 
-      const result =
-        await pool.query(
-          `
-            UPDATE products
+      if (!validImageData(imageData)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid or oversized image."
+        });
+      }
 
-            SET image_data = $1
-
-            WHERE code = $2
+      const result = await pool.query(
+        `
+          UPDATE products
+          SET image_data = $1
+          WHERE code = $2
             AND business_id = $3
+          RETURNING *
+        `,
+        [
+          imageData || "",
+          req.params.code,
+          req.business.id
+        ]
+      );
 
-            RETURNING *
-          `,
-          [
-            String(
-              imageData || ""
-            ),
-
-            code,
-
-            req.business.id
-          ]
-        );
-
-      if (!result.rowCount) {
-
+      if (!result.rows.length) {
         return res.status(404).json({
-
-          error:
-            "Product not found."
+          success: false,
+          error: "Product not found."
         });
       }
 
       res.json({
-
-        ok: true,
-
-        product:
-          publicProduct(
-            result.rows[0],
-            true
-          )
+        success: true,
+        product: publicProduct(
+          result.rows[0],
+          true
+        )
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "Update image error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to update product image."
+        success: false,
+        error: "Unable to update product image."
       });
     }
   }
 );
-
 
 /* =========================================================
    DELETE PRODUCT
@@ -1978,205 +1181,179 @@ app.delete(
   "/api/products/:code",
   auth,
   async (req, res) => {
-
-    const code =
-      String(
-        req.params.code || ""
-      )
-        .trim()
-        .toUpperCase();
-
     try {
-
-      const result =
-        await pool.query(
-          `
-            DELETE FROM products
-            WHERE code = $1
+      const result = await pool.query(
+        `
+          DELETE FROM products
+          WHERE code = $1
             AND business_id = $2
+          RETURNING id
+        `,
+        [
+          req.params.code,
+          req.business.id
+        ]
+      );
 
-            RETURNING id
-          `,
-          [
-            code,
-
-            req.business.id
-          ]
-        );
-
-      if (!result.rowCount) {
-
+      if (!result.rows.length) {
         return res.status(404).json({
-
-          error:
-            "Product not found."
+          success: false,
+          error: "Product not found."
         });
       }
 
       res.json({
-
-        ok: true,
-
-        message:
-          "Product deleted."
+        success: true,
+        message: "Product deleted."
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "Delete product error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to delete product."
+        success: false,
+        error: "Unable to delete product."
       });
     }
   }
 );
 
-
 /* =========================================================
-   CHANGE PRODUCT STATUS
+   UPDATE PRODUCT STATUS
 ========================================================= */
 
 app.patch(
   "/api/products/:code/status",
   auth,
   async (req, res) => {
+    try {
+      const {
+        status
+      } = req.body || {};
 
-    const status =
-      req.body?.status;
-
-    if (
-      ![
+      const allowedStatuses = [
         "active",
         "disabled",
         "recalled"
-      ].includes(status)
-    ) {
+      ];
 
-      return res.status(400).json({
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid product status."
+        });
+      }
 
-        error:
-          "Invalid status."
-      });
-    }
-
-    try {
-
-      const result =
-        await pool.query(
-          `
-            UPDATE products
-
-            SET status = $1
-
-            WHERE code = $2
+      const result = await pool.query(
+        `
+          UPDATE products
+          SET status = $1
+          WHERE code = $2
             AND business_id = $3
-          `,
-          [
-            status,
+          RETURNING *
+        `,
+        [
+          status,
+          req.params.code,
+          req.business.id
+        ]
+      );
 
-            req.params.code,
-
-            req.business.id
-          ]
-        );
-
-      if (!result.rowCount) {
-
+      if (!result.rows.length) {
         return res.status(404).json({
-
-          error:
-            "Product not found."
+          success: false,
+          error: "Product not found."
         });
       }
 
       res.json({
-
-        ok: true
+        success: true,
+        product: publicProduct(
+          result.rows[0],
+          false
+        )
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "Product status error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to update product."
+        success: false,
+        error: "Unable to update product status."
       });
     }
   }
 );
 
-
 /* =========================================================
-   GENERATE QR CODE
+   PRODUCT QR
 ========================================================= */
 
 app.get(
   "/api/products/:code/qr",
   auth,
   async (req, res) => {
-
     try {
-
-      const result =
-        await pool.query(
-          `
-            SELECT *
-            FROM products
-            WHERE code = $1
+      const result = await pool.query(
+        `
+          SELECT *
+          FROM products
+          WHERE code = $1
             AND business_id = $2
-          `,
-          [
-            req.params.code,
+          LIMIT 1
+        `,
+        [
+          req.params.code,
+          req.business.id
+        ]
+      );
 
-            req.business.id
-          ]
-        );
-
-      const product =
-        result.rows[0];
-
-      if (!product) {
-
+      if (!result.rows.length) {
         return res.status(404).json({
-
-          error:
-            "Product not found."
+          success: false,
+          error: "Product not found."
         });
       }
 
-      const qr =
-        await generateProductQR(
+      const product = result.rows[0];
+
+      const verifyUrl =
+        getVerificationUrl(
           req,
           product.code
         );
 
+      const data =
+        await QRCode.toDataURL(
+          verifyUrl,
+          {
+            margin: 2,
+            width: 600
+          }
+        );
+
       res.json({
-
-        url:
-          qr.url,
-
-        data:
-          qr.data
+        success: true,
+        url: verifyUrl,
+        data
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "QR generation error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to generate QR code."
+        success: false,
+        error: "Unable to generate QR code."
       });
     }
   }
 );
-
 
 /* =========================================================
    PUBLIC PRODUCT VERIFICATION
@@ -2185,763 +1362,511 @@ app.get(
 app.get(
   "/api/verify/:code",
   async (req, res) => {
-
-    const code =
-      String(
-        req.params.code || ""
-      )
-        .trim()
-        .toUpperCase();
-
     try {
+      const code =
+        String(req.params.code || "")
+          .trim()
+          .toUpperCase();
 
-      const result =
-        await pool.query(
-          `
-            SELECT *
-            FROM products
-            WHERE code = $1
-          `,
-          [
-            code
-          ]
-        );
+      const result = await pool.query(
+        `
+          SELECT *
+          FROM products
+          WHERE code = $1
+          LIMIT 1
+        `,
+        [code]
+      );
 
-      const product =
-        result.rows[0];
-
-      /*
-        Code doesn't exist.
-      */
-
-      if (!product) {
-
+      if (!result.rows.length) {
         await pool.query(
           `
             INSERT INTO verifications
-            (
-              code,
-              result,
-              checked_at
-            )
+              (
+                product_id,
+                code,
+                result,
+                checked_at
+              )
             VALUES
-            ($1, $2, $3)
+              (NULL, $1, 'not_verified', $2)
           `,
           [
             code,
-
-            "not_verified",
-
             now()
           ]
         );
 
-        return res.json({
-
-          result:
-            "not_verified",
-
-          message:
-            "This code is not registered in the VerifyIt database."
+        return res.status(404).json({
+          success: false,
+          result: "not_verified",
+          message: "Product could not be verified."
         });
       }
 
-      /*
-        Determine result.
-      */
+      const product = result.rows[0];
 
-      let verificationResult;
+      const warning =
+        product.status !== "active" ||
+        Number(product.verification_count || 0) >= 5;
 
-      if (
-        product.status !==
-        "active"
-      ) {
-
-        verificationResult =
-          "warning";
-
-      } else if (
-        Number(
-          product.verification_count
-        ) >= 5
-      ) {
-
-        verificationResult =
-          "warning";
-
-      } else {
-
-        verificationResult =
-          "authentic";
-      }
-
-      let message;
-
-      if (
-        product.status !==
-        "active"
-      ) {
-
-        message =
-          `This product record is marked ${product.status}.`;
-
-      } else if (
-        verificationResult ===
-        "warning"
-      ) {
-
-        message =
-          "This code is registered, but it has unusually high verification activity. Check the item with the seller or manufacturer.";
-
-      } else {
-
-        message =
-          "The code matches a registered product record.";
-      }
-
-      /*
-        Increase verification count.
-      */
+      const verificationResult =
+        warning
+          ? "warning"
+          : "authentic";
 
       await pool.query(
         `
           UPDATE products
-
           SET verification_count =
-            verification_count + 1
-
+            COALESCE(verification_count, 0) + 1
           WHERE id = $1
         `,
-        [
-          product.id
-        ]
+        [product.id]
       );
-
-      /*
-        Record verification.
-      */
 
       await pool.query(
         `
           INSERT INTO verifications
-          (
-            product_id,
-            code,
-            result,
-            checked_at
-          )
+            (
+              product_id,
+              code,
+              result,
+              checked_at
+            )
           VALUES
-          ($1, $2, $3, $4)
+            ($1, $2, $3, $4)
         `,
         [
           product.id,
-
           code,
-
           verificationResult,
-
           now()
         ]
       );
 
-      /*
-        Get updated product.
-      */
-
-      const freshResult =
+      const refreshed =
         await pool.query(
           `
             SELECT *
             FROM products
             WHERE id = $1
+            LIMIT 1
           `,
-          [
-            product.id
-          ]
+          [product.id]
         );
 
+      const finalProduct =
+        refreshed.rows[0] || product;
+
       res.json({
-
-        result:
-          verificationResult,
-
-        product:
-          publicProduct(
-            freshResult.rows[0],
-            true
-          ),
-
-        message
+        success: true,
+        result: verificationResult,
+        product: publicProduct(
+          finalProduct,
+          true
+        ),
+        message:
+          verificationResult === "authentic"
+            ? "Product verified successfully."
+            : "Warning: this product requires attention."
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "Verification error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to verify product."
+        success: false,
+        error: "Unable to verify product."
       });
     }
   }
 );
 
-
 /* =========================================================
-   BUSINESS STATISTICS
+   BUSINESS STATS
 ========================================================= */
 
 app.get(
   "/api/stats",
   auth,
   async (req, res) => {
-
     try {
-
-      const products =
+      const productCount =
         await pool.query(
           `
-            SELECT COUNT(*) AS count
-
+            SELECT COUNT(*)::int AS count
             FROM products
-
             WHERE business_id = $1
           `,
-          [
-            req.business.id
-          ]
+          [req.business.id]
         );
 
-      const checks =
+      const verificationCount =
         await pool.query(
           `
-            SELECT COUNT(*) AS count
-
+            SELECT COUNT(*)::int AS count
             FROM verifications v
-
-            JOIN products p
+            INNER JOIN products p
               ON p.id = v.product_id
-
             WHERE p.business_id = $1
           `,
-          [
-            req.business.id
-          ]
+          [req.business.id]
         );
 
-      const warnings =
+      const warningCount =
         await pool.query(
           `
-            SELECT COUNT(*) AS count
-
+            SELECT COUNT(*)::int AS count
             FROM verifications v
-
-            JOIN products p
+            INNER JOIN products p
               ON p.id = v.product_id
-
             WHERE p.business_id = $1
-
-            AND v.result = 'warning'
+              AND v.result = 'warning'
           `,
-          [
-            req.business.id
-          ]
+          [req.business.id]
         );
 
       res.json({
-
+        success: true,
         products:
-          Number(
-            products.rows[0].count
-          ),
+          Number(productCount.rows[0].count),
 
-        checks:
-          Number(
-            checks.rows[0].count
-          ),
+        totalChecks:
+          Number(verificationCount.rows[0].count),
 
         warnings:
-          Number(
-            warnings.rows[0].count
-          )
+          Number(warningCount.rows[0].count)
       });
-
     } catch (error) {
-
-      console.error(error);
+      console.error(
+        "Stats error:",
+        error.message
+      );
 
       res.status(500).json({
-
-        error:
-          "Unable to load statistics."
+        success: false,
+        error: "Unable to load statistics."
       });
     }
   }
 );
-
 
 /* =========================================================
    OWNER CONTROL PAGE
 ========================================================= */
 
-app.get(
-  "/owner",
-  (_req, res) => {
-
-    res.type("html").send(`
-
+app.get("/owner", (_req, res) => {
+  res.send(`
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
-
   <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
-  <title>
-    VerifyIt Owner Control
-  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VerifyIt Owner Control</title>
 
   <style>
-
-    * {
-      box-sizing: border-box;
-    }
-
     body {
-
       margin: 0;
-
-      padding: 20px;
-
-      min-height: 100vh;
-
+      padding: 30px;
+      font-family: Arial, sans-serif;
       background: #111;
-
       color: #fff;
-
-      font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
     }
 
-    .box {
-
-      width: 100%;
-
-      max-width: 500px;
-
-      margin:
-        40px auto;
-
-      padding: 25px;
-
-      background: #1c1c1c;
-
-      border-radius: 16px;
-
-      box-shadow:
-        0 0 25px
-        rgba(0, 0, 0, 0.4);
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
     }
 
     h1 {
-
-      margin-top: 0;
-
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
-    .subtitle {
-
-      color: #aaa;
-
-      margin-bottom: 25px;
-    }
-
-    .status {
-
-      padding: 18px;
-
-      margin:
-        20px 0;
-
-      border-radius: 10px;
-
-      background: #292929;
-
-      font-weight: bold;
-
-      text-align: center;
+    .card {
+      background: #1d1d1d;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 20px;
     }
 
     input {
-
       width: 100%;
-
-      padding: 14px;
-
-      margin-bottom: 15px;
-
+      box-sizing: border-box;
+      padding: 12px;
+      margin: 8px 0 12px;
       border-radius: 8px;
-
-      border:
-        1px solid #555;
-
+      border: 1px solid #444;
       background: #111;
-
-      color: white;
-
-      font-size: 16px;
+      color: #fff;
     }
 
     button {
-
-      width: 100%;
-
-      padding: 15px;
-
-      margin-top: 10px;
-
+      padding: 12px 16px;
+      margin: 5px;
       border: 0;
-
       border-radius: 8px;
-
-      font-size: 16px;
-
-      font-weight: bold;
-
       cursor: pointer;
+      font-weight: bold;
     }
 
-    button:active {
-
-      transform:
-        scale(0.98);
+    #status {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #111;
     }
 
-    .lock {
-
-      background: #b00020;
-
-      color: white;
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #111;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
     }
-
-    .unlock {
-
-      background: #087f23;
-
-      color: white;
-    }
-
-    .refresh {
-
-      background: #444;
-
-      color: white;
-    }
-
-    #message {
-
-      margin-top: 20px;
-
-      padding: 10px;
-
-      white-space:
-        pre-wrap;
-
-      line-height: 1.5;
-    }
-
   </style>
-
 </head>
 
 <body>
 
-  <div class="box">
+<div class="container">
 
-    <h1>
-      VerifyIt Owner Control
-    </h1>
+  <h1>VerifyIt Owner Control</h1>
+  <p>VerifyIt Lock In Protocol</p>
 
-    <div class="subtitle">
-      Emergency system control
-    </div>
+  <div class="card">
 
-    <div
-      id="status"
-      class="status"
-    >
-      Enter your owner key to check system status.
-    </div>
+    <label>Owner Key</label>
 
     <input
       id="ownerKey"
       type="password"
-      placeholder="Enter owner key"
-      autocomplete="off"
+      placeholder="Enter VERIFYIT_OWNER_KEY"
     >
 
-    <button
-      class="lock"
-      onclick="changeLock(true)"
-    >
-      🔒 LOCK VERIFYIT
+    <button onclick="checkStatus()">
+      Check Status
     </button>
 
-    <button
-      class="unlock"
-      onclick="changeLock(false)"
-    >
-      🔓 UNLOCK VERIFYIT
+    <button onclick="lockSystem()">
+      LOCK VERIFYIT
     </button>
 
-    <button
-      class="refresh"
-      onclick="loadStatus()"
-    >
-      🔄 REFRESH STATUS
+    <button onclick="unlockSystem()">
+      UNLOCK VERIFYIT
     </button>
 
-    <div
-      id="message"
-    ></div>
+    <div id="status">
+      Status unknown.
+    </div>
 
   </div>
 
+  <div class="card">
+
+    <h2>Audit Log</h2>
+
+    <button onclick="loadAudit()">
+      Refresh Audit Log
+    </button>
+
+    <pre id="audit">No audit data loaded.</pre>
+
+  </div>
+
+</div>
 
 <script>
 
-async function loadStatus() {
-
-  const status =
-    document.getElementById(
-      "status"
-    );
-
-  const message =
-    document.getElementById(
-      "message"
-    );
-
   const keyInput =
-    document.getElementById(
-      "ownerKey"
-    );
+    document.getElementById("ownerKey");
 
-  const key =
-    keyInput.value;
+  const statusBox =
+    document.getElementById("status");
 
-  if (!key) {
+  const auditBox =
+    document.getElementById("audit");
 
-    status.textContent =
-      "🔑 Enter your owner key to check status.";
-
-    message.textContent =
-      "";
-
-    return;
+  function headers() {
+    return {
+      "x-verifyit-owner-key":
+        keyInput.value.trim()
+    };
   }
 
-  status.textContent =
-    "Checking system status...";
-
-  message.textContent =
-    "";
-
-  try {
-
-    const response =
-      await fetch(
-        "/api/owner/lockdown-status",
-        {
-          method:
-            "GET",
-
-          headers: {
-            "x-verifyit-owner-key":
-              key
+  async function checkStatus() {
+    try {
+      const response =
+        await fetch(
+          "/api/owner/lockdown-status",
+          {
+            headers: headers()
           }
-        }
-      );
+        );
 
-    const data =
-      await response.json();
+      const data =
+        await response.json();
 
-    if (!response.ok) {
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to check status."
+        );
+      }
 
-      throw new Error(
-        data.error ||
-        "Unable to read status."
-      );
+      statusBox.textContent =
+        data.lockdown
+          ? "🔒 VERIFYIT IS LOCKED"
+          : "🟢 VERIFYIT IS UNLOCKED";
+
+    } catch (error) {
+      statusBox.textContent =
+        error.message;
     }
-
-    if (data.locked) {
-
-      status.textContent =
-        "🔒 VERIFYIT IS LOCKED";
-
-    } else {
-
-      status.textContent =
-        "🟢 VERIFYIT IS UNLOCKED";
-    }
-
-  } catch (error) {
-
-    status.textContent =
-      "⚠️ Unable to read status.";
-
-    message.textContent =
-      error.message;
-  }
-}
-
-
-async function changeLock(
-  locked
-) {
-
-  const keyInput =
-    document.getElementById(
-      "ownerKey"
-    );
-
-  const message =
-    document.getElementById(
-      "message"
-    );
-
-  const key =
-    keyInput.value;
-
-  if (!key) {
-
-    message.textContent =
-      "Enter your owner key first.";
-
-    return;
   }
 
-  const endpoint =
-    locked
-      ? "/api/owner/lockdown"
-      : "/api/owner/unlock";
-
-  message.textContent =
-    locked
-      ? "Activating lockdown..."
-      : "Restoring VerifyIt...";
-
-  try {
-
-    const response =
-      await fetch(
-        endpoint,
-        {
-          method:
-            "POST",
-
-          headers: {
-            "x-verifyit-owner-key":
-              key
+  async function lockSystem() {
+    try {
+      const response =
+        await fetch(
+          "/api/owner/lockdown",
+          {
+            method: "POST",
+            headers: headers()
           }
-        }
-      );
+        );
 
-    const data =
-      await response.json();
+      const data =
+        await response.json();
 
-    if (!response.ok) {
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to lock VerifyIt."
+        );
+      }
 
-      throw new Error(
-        data.error ||
-        "Request failed."
-      );
+      statusBox.textContent =
+        "🔒 VERIFYIT IS NOW LOCKED";
+
+    } catch (error) {
+      statusBox.textContent =
+        error.message;
     }
-
-    message.textContent =
-      locked
-        ? "🔒 Lockdown activated successfully."
-        : "🔓 VerifyIt restored successfully.";
-
-    await loadStatus();
-
-  } catch (error) {
-
-    message.textContent =
-      "⚠️ " +
-      error.message;
   }
-}
+
+  async function unlockSystem() {
+    try {
+      const response =
+        await fetch(
+          "/api/owner/unlock",
+          {
+            method: "POST",
+            headers: headers()
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to unlock VerifyIt."
+        );
+      }
+
+      statusBox.textContent =
+        "🟢 VERIFYIT IS NOW UNLOCKED";
+
+    } catch (error) {
+      statusBox.textContent =
+        error.message;
+    }
+  }
+
+  async function loadAudit() {
+    try {
+      const response =
+        await fetch(
+          "/api/owner/audit-log",
+          {
+            headers: headers()
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to load audit log."
+        );
+      }
+
+      auditBox.textContent =
+        JSON.stringify(
+          data.logs,
+          null,
+          2
+        );
+
+    } catch (error) {
+      auditBox.textContent =
+        error.message;
+    }
+  }
 
 </script>
 
 </body>
-
 </html>
-
-    `);
-  }
-);
-
+  `);
+});
 
 /* =========================================================
-   FRONTEND
+   FRONTEND FALLBACK
 ========================================================= */
 
-app.get(
-  "*",
-  (_req, res) => {
-
-    res.sendFile(
-      path.join(
-        __dirname,
-        "public",
-        "index.html"
-      )
-    );
-  }
-);
-
+app.get("*", (_req, res) => {
+  res.sendFile(
+    path.join(
+      __dirname,
+      "public",
+      "index.html"
+    )
+  );
+});
 
 /* =========================================================
    START SERVER
 ========================================================= */
 
 initDatabase()
-
   .then(() => {
+
+    if (!OWNER_KEY) {
+      console.warn(
+        "WARNING: VERIFYIT_OWNER_KEY is not configured."
+      );
+    }
 
     app.listen(
       PORT,
       () => {
-
-        if (!OWNER_KEY) {
-
-          console.warn(
-            "WARNING: VERIFYIT_OWNER_KEY is not configured. Owner controls will remain unavailable."
-          );
-        }
-
         console.log(
-          `VerifyIt V1.6.0 with Lock In Protocol running on port ${PORT}`
+          `VerifyIt V1.6 with Lock In Protocol running on port ${PORT}`
         );
       }
     );
 
   })
-
-  .catch((error) => {
-
+  .catch(error => {
     console.error(
       "Database initialization failed:",
       error
