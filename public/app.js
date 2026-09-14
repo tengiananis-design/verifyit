@@ -26,31 +26,36 @@ async function api(url, options = {}) {
     typeof requestOptions.body !== "string"
   ) {
     headers["Content-Type"] = "application/json";
-    requestOptions.body = JSON.stringify(
-      requestOptions.body
-    );
+
+    requestOptions.body =
+      JSON.stringify(requestOptions.body);
   }
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    headers.Authorization =
+      `Bearer ${token}`;
   }
 
-  requestOptions.headers = headers;
+  requestOptions.headers =
+    headers;
 
-  const response = await fetch(
-    url,
-    requestOptions
-  );
+  const response =
+    await fetch(
+      url,
+      requestOptions
+    );
 
   let data = {};
 
   try {
-    data = await response.json();
+    data =
+      await response.json();
   } catch {
     data = {};
   }
 
   if (!response.ok) {
+
     if (
       response.status === 503 &&
       data.locked
@@ -74,90 +79,128 @@ async function api(url, options = {}) {
 ========================================================= */
 
 function compressImage(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
 
-    reader.onload = () => {
-      const image = new Image();
+  return new Promise(
+    (resolve, reject) => {
 
-      image.onload = () => {
-        const maxSize = 1200;
+      const reader =
+        new FileReader();
 
-        let width = image.width;
-        let height = image.height;
+      reader.onload = () => {
 
-        if (
-          width > maxSize ||
-          height > maxSize
-        ) {
-          if (width > height) {
-            height = Math.round(
-              height * (maxSize / width)
-            );
+        const image =
+          new Image();
 
-            width = maxSize;
-          } else {
-            width = Math.round(
-              width * (maxSize / height)
-            );
+        image.onload = () => {
 
-            height = maxSize;
+          const maxSize = 1200;
+
+          let width =
+            image.width;
+
+          let height =
+            image.height;
+
+          if (
+            width > maxSize ||
+            height > maxSize
+          ) {
+
+            if (
+              width > height
+            ) {
+
+              height =
+                Math.round(
+                  height *
+                  (maxSize / width)
+                );
+
+              width =
+                maxSize;
+
+            } else {
+
+              width =
+                Math.round(
+                  width *
+                  (maxSize / height)
+                );
+
+              height =
+                maxSize;
+            }
           }
-        }
 
-        const canvas =
-          document.createElement("canvas");
+          const canvas =
+            document.createElement(
+              "canvas"
+            );
 
-        canvas.width = width;
-        canvas.height = height;
+          canvas.width =
+            width;
 
-        const ctx =
-          canvas.getContext("2d");
+          canvas.height =
+            height;
 
-        ctx.drawImage(
-          image,
-          0,
-          0,
-          width,
-          height
-        );
+          const ctx =
+            canvas.getContext(
+              "2d"
+            );
 
-        resolve(
-          canvas.toDataURL(
-            "image/jpeg",
-            0.78
-          )
-        );
+          ctx.drawImage(
+            image,
+            0,
+            0,
+            width,
+            height
+          );
+
+          resolve(
+            canvas.toDataURL(
+              "image/jpeg",
+              0.78
+            )
+          );
+        };
+
+        image.onerror = () => {
+
+          reject(
+            new Error(
+              "Unable to read image."
+            )
+          );
+        };
+
+        image.src =
+          reader.result;
       };
 
-      image.onerror = () => {
+      reader.onerror = () => {
+
         reject(
           new Error(
-            "Unable to read image."
+            "Unable to load image."
           )
         );
       };
 
-      image.src = reader.result;
-    };
-
-    reader.onerror = () => {
-      reject(
-        new Error(
-          "Unable to load image."
-        )
+      reader.readAsDataURL(
+        file
       );
-    };
-
-    reader.readAsDataURL(file);
-  });
+    }
+  );
 }
 
 /* =========================================================
    AUTH DISPLAY
 ========================================================= */
 
-function showDashboard(business) {
+function showDashboard(
+  business
+) {
+
   if ($("authArea")) {
     $("authArea").hidden = true;
   }
@@ -167,13 +210,17 @@ function showDashboard(business) {
   }
 
   if ($("businessName")) {
-    $("businessName").textContent =
+
+    $("businessName")
+      .textContent =
       business?.name ||
       "Business Dashboard";
   }
 
   if ($("businessEmail")) {
-    $("businessEmail").textContent =
+
+    $("businessEmail")
+      .textContent =
       business?.email || "";
   }
 
@@ -181,6 +228,7 @@ function showDashboard(business) {
 }
 
 function showAuth() {
+
   if ($("authArea")) {
     $("authArea").hidden = false;
   }
@@ -195,21 +243,29 @@ function showAuth() {
 ========================================================= */
 
 async function loadCurrentUser() {
+
   const token =
     localStorage.getItem(
       "verifyit_token"
     );
 
   if (!token) {
+
     showAuth();
+
     return;
   }
 
   try {
-    const business =
-      await api("/api/me");
 
-    showDashboard(business);
+    const business =
+      await api(
+        "/api/me"
+      );
+
+    showDashboard(
+      business
+    );
 
   } catch (error) {
 
@@ -217,8 +273,10 @@ async function loadCurrentUser() {
       error.message ===
       "VerifyIt is currently under lockdown."
     ) {
+
       showDashboard({
-        name: "VerifyIt Partner",
+        name:
+          "VerifyIt Partner",
         email: ""
       });
 
@@ -238,10 +296,12 @@ async function loadCurrentUser() {
 ========================================================= */
 
 function connectRegisterForm() {
+
   const form =
     $("registerForm");
 
   if (!form) {
+
     console.warn(
       "VerifyIt: registerForm not found."
     );
@@ -252,30 +312,41 @@ function connectRegisterForm() {
   form.addEventListener(
     "submit",
     async event => {
+
       event.preventDefault();
 
       try {
+
         const data =
-          await api("/api/register", {
-            method: "POST",
-            body: {
-              name:
-                $("registerName")
-                  ?.value
-                  ?.trim() || "",
+          await api(
+            "/api/register",
+            {
+              method:
+                "POST",
 
-              email:
-                $("registerEmail")
-                  ?.value
-                  ?.trim() || "",
+              body: {
+                name:
+                  $("registerName")
+                    ?.value
+                    ?.trim() ||
+                  "",
 
-              password:
-                $("registerPassword")
-                  ?.value || ""
+                email:
+                  $("registerEmail")
+                    ?.value
+                    ?.trim() ||
+                  "",
+
+                password:
+                  $("registerPassword")
+                    ?.value ||
+                  ""
+              }
             }
-          });
+          );
 
         if (!data.token) {
+
           throw new Error(
             "Registration succeeded but no login token was returned."
           );
@@ -291,6 +362,7 @@ function connectRegisterForm() {
         );
 
       } catch (error) {
+
         alert(
           error.message ||
           "Registration failed."
@@ -305,10 +377,12 @@ function connectRegisterForm() {
 ========================================================= */
 
 function connectLoginForm() {
+
   const form =
     $("loginForm");
 
   if (!form) {
+
     console.error(
       "VerifyIt: loginForm not found."
     );
@@ -323,7 +397,10 @@ function connectLoginForm() {
   form.addEventListener(
     "submit",
     async event => {
+
       event.preventDefault();
+
+      event.stopPropagation();
 
       console.log(
         "VerifyIt: Login submitted."
@@ -335,7 +412,11 @@ function connectLoginForm() {
       const passwordInput =
         $("loginPassword");
 
-      if (!emailInput || !passwordInput) {
+      if (
+        !emailInput ||
+        !passwordInput
+      ) {
+
         alert(
           "Login form is missing the email or password field."
         );
@@ -350,6 +431,7 @@ function connectLoginForm() {
         passwordInput.value;
 
       if (!email) {
+
         alert(
           "Please enter your email address."
         );
@@ -360,6 +442,7 @@ function connectLoginForm() {
       }
 
       if (!password) {
+
         alert(
           "Please enter your password."
         );
@@ -377,25 +460,39 @@ function connectLoginForm() {
       const originalText =
         submitButton
           ? submitButton.textContent
-          : "";
+          : "Login";
 
       if (submitButton) {
-        submitButton.disabled = true;
+
+        submitButton.disabled =
+          true;
+
         submitButton.textContent =
           "Logging in...";
       }
 
       try {
+
         const data =
-          await api("/api/login", {
-            method: "POST",
-            body: {
-              email,
-              password
+          await api(
+            "/api/login",
+            {
+              method:
+                "POST",
+
+              body: {
+                email,
+                password
+              }
             }
-          });
+          );
+
+        console.log(
+          "VerifyIt: Login response received."
+        );
 
         if (!data.token) {
+
           throw new Error(
             "Login succeeded but no authentication token was returned."
           );
@@ -410,7 +507,37 @@ function connectLoginForm() {
           data.business
         );
 
+        /*
+          Move directly to dashboard
+          after successful login.
+        */
+
+        setTimeout(
+          () => {
+
+            if (
+              $("dashboard")
+            ) {
+
+              $("dashboard")
+                .scrollIntoView({
+                  behavior:
+                    "smooth",
+                  block:
+                    "start"
+                });
+            }
+
+          },
+          100
+        );
+
       } catch (error) {
+
+        console.error(
+          "VerifyIt login error:",
+          error
+        );
 
         alert(
           error.message ||
@@ -420,9 +547,13 @@ function connectLoginForm() {
       } finally {
 
         if (submitButton) {
-          submitButton.disabled = false;
+
+          submitButton.disabled =
+            false;
+
           submitButton.textContent =
-            originalText || "Login";
+            originalText ||
+            "Login";
         }
       }
     }
@@ -434,6 +565,7 @@ function connectLoginForm() {
 ========================================================= */
 
 function logout() {
+
   localStorage.removeItem(
     "verifyit_token"
   );
@@ -446,13 +578,15 @@ function logout() {
   });
 }
 
-window.logout = logout;
+window.logout =
+  logout;
 
 /* =========================================================
    SINGLE PRODUCT REGISTRATION
 ========================================================= */
 
 function connectProductForm() {
+
   const form =
     $("productForm");
 
@@ -463,9 +597,11 @@ function connectProductForm() {
   form.addEventListener(
     "submit",
     async event => {
+
       event.preventDefault();
 
       try {
+
         let imageData = "";
 
         const imageInput =
@@ -476,6 +612,7 @@ function connectProductForm() {
           imageInput.files &&
           imageInput.files[0]
         ) {
+
           imageData =
             await compressImage(
               imageInput.files[0]
@@ -483,27 +620,36 @@ function connectProductForm() {
         }
 
         const data =
-          await api("/api/products", {
-            method: "POST",
-            body: {
-              brand:
-                $("productBrand")
-                  ?.value
-                  ?.trim() || "",
+          await api(
+            "/api/products",
+            {
+              method:
+                "POST",
 
-              productName:
-                $("productName")
-                  ?.value
-                  ?.trim() || "",
+              body: {
 
-              batch:
-                $("productBatch")
-                  ?.value
-                  ?.trim() || "",
+                brand:
+                  $("productBrand")
+                    ?.value
+                    ?.trim() ||
+                  "",
 
-              imageData
+                productName:
+                  $("productName")
+                    ?.value
+                    ?.trim() ||
+                  "",
+
+                batch:
+                  $("productBatch")
+                    ?.value
+                    ?.trim() ||
+                  "",
+
+                imageData
+              }
             }
-          });
+          );
 
         alert(
           "Product registered successfully.\n\n" +
@@ -517,7 +663,10 @@ function connectProductForm() {
         await loadStats();
 
       } catch (error) {
-        alert(error.message);
+
+        alert(
+          error.message
+        );
       }
     }
   );
@@ -528,9 +677,13 @@ function connectProductForm() {
 ========================================================= */
 
 async function loadProducts() {
+
   try {
+
     const data =
-      await api("/api/products");
+      await api(
+        "/api/products"
+      );
 
     const products =
       data.products || [];
@@ -546,6 +699,7 @@ async function loadProducts() {
     }
 
     if (!products.length) {
+
       container.innerHTML = `
         <div class="empty-state">
           No products registered yet.
@@ -556,74 +710,123 @@ async function loadProducts() {
     }
 
     container.innerHTML =
-      products.map(product => `
-        <div class="product-card"
-             data-code="${escapeHtml(product.code)}">
+      products
+        .map(
+          product => `
 
-          <div class="product-card-header">
+        <div
+          class="product-card"
+          data-code="${escapeHtml(
+            product.code
+          )}"
+        >
+
+          <div
+            class="product-card-header"
+          >
+
             <strong>
-              ${escapeHtml(product.brand)}
+              ${escapeHtml(
+                product.brand
+              )}
             </strong>
 
-            <span class="product-status">
-              ${escapeHtml(product.status)}
+            <span
+              class="product-status"
+            >
+              ${escapeHtml(
+                product.status
+              )}
             </span>
+
           </div>
 
-          <div class="product-card-body">
+          <div
+            class="product-card-body"
+          >
 
             <div>
-              <strong>Product</strong><br>
-              ${escapeHtml(product.productName)}
+              <strong>
+                Product
+              </strong>
+              <br>
+              ${escapeHtml(
+                product.productName
+              )}
             </div>
 
             <div>
-              <strong>Batch</strong><br>
-              ${escapeHtml(product.batch || "—")}
+              <strong>
+                Batch
+              </strong>
+              <br>
+              ${escapeHtml(
+                product.batch ||
+                "—"
+              )}
             </div>
 
             <div>
-              <strong>Code</strong><br>
+              <strong>
+                Code
+              </strong>
+              <br>
               <code>
-                ${escapeHtml(product.code)}
+                ${escapeHtml(
+                  product.code
+                )}
               </code>
             </div>
 
             <div>
-              <strong>Checks</strong><br>
+              <strong>
+                Checks
+              </strong>
+              <br>
               ${Number(
-                product.verificationCount || 0
+                product.verificationCount ||
+                0
               )}
             </div>
 
           </div>
 
-          <div class="product-card-actions">
+          <div
+            class="product-card-actions"
+          >
 
             <button
               type="button"
-              onclick="showProductQR('${escapeJs(product.code)}')"
+              onclick="showProductQR('${escapeJs(
+                product.code
+              )}')"
             >
               QR
             </button>
 
             <button
               type="button"
-              onclick="copyVerificationCode('${escapeJs(product.code)}')"
+              onclick="copyVerificationCode('${escapeJs(
+                product.code
+              )}')"
             >
               Copy Code
             </button>
 
             <button
               type="button"
-              onclick="changeProductStatus('${escapeJs(product.code)}','disabled')"
+              onclick="changeProductStatus('${escapeJs(
+                product.code
+              )}','disabled')"
             >
               Disable
             </button>
 
             <button
               type="button"
-              onclick="deleteProduct('${escapeJs(product.code)}')"
+              onclick="deleteProduct('${escapeJs(
+                product.code
+              )}')"
             >
               Delete
             </button>
@@ -631,7 +834,9 @@ async function loadProducts() {
           </div>
 
         </div>
-      `).join("");
+      `
+        )
+        .join("");
 
   } catch (error) {
 
@@ -654,41 +859,58 @@ async function loadProducts() {
 ========================================================= */
 
 async function loadStats() {
+
   try {
+
     const data =
-      await api("/api/stats");
+      await api(
+        "/api/stats"
+      );
 
     if ($("productCount")) {
-      $("productCount").textContent =
+
+      $("productCount")
+        .textContent =
         data.products ?? 0;
     }
 
     if ($("totalProducts")) {
-      $("totalProducts").textContent =
+
+      $("totalProducts")
+        .textContent =
         data.products ?? 0;
     }
 
     if ($("checkCount")) {
-      $("checkCount").textContent =
+
+      $("checkCount")
+        .textContent =
         data.totalChecks ?? 0;
     }
 
     if ($("totalChecks")) {
-      $("totalChecks").textContent =
+
+      $("totalChecks")
+        .textContent =
         data.totalChecks ?? 0;
     }
 
     if ($("warningCount")) {
-      $("warningCount").textContent =
+
+      $("warningCount")
+        .textContent =
         data.warnings ?? 0;
     }
 
     if ($("totalWarnings")) {
-      $("totalWarnings").textContent =
+
+      $("totalWarnings")
+        .textContent =
         data.warnings ?? 0;
     }
 
   } catch (error) {
+
     console.error(
       "Stats error:",
       error
@@ -701,6 +923,7 @@ async function loadStats() {
 ========================================================= */
 
 async function loadDashboard() {
+
   await Promise.allSettled([
     loadStats(),
     loadProducts()
@@ -712,6 +935,7 @@ async function loadDashboard() {
 ========================================================= */
 
 function refreshProducts() {
+
   loadProducts();
   loadStats();
 }
@@ -723,7 +947,10 @@ window.refreshProducts =
    DELETE PRODUCT
 ========================================================= */
 
-async function deleteProduct(code) {
+async function deleteProduct(
+  code
+) {
+
   const confirmed =
     confirm(
       "Delete this product?\n\n" +
@@ -735,11 +962,15 @@ async function deleteProduct(code) {
   }
 
   try {
+
     await api(
       "/api/products/" +
-      encodeURIComponent(code),
+      encodeURIComponent(
+        code
+      ),
       {
-        method: "DELETE"
+        method:
+          "DELETE"
       }
     );
 
@@ -747,7 +978,10 @@ async function deleteProduct(code) {
     await loadStats();
 
   } catch (error) {
-    alert(error.message);
+
+    alert(
+      error.message
+    );
   }
 }
 
@@ -762,13 +996,19 @@ async function changeProductStatus(
   code,
   status
 ) {
+
   try {
+
     await api(
       "/api/products/" +
-      encodeURIComponent(code) +
+      encodeURIComponent(
+        code
+      ) +
       "/status",
       {
-        method: "PATCH",
+        method:
+          "PATCH",
+
         body: {
           status
         }
@@ -778,7 +1018,10 @@ async function changeProductStatus(
     await loadProducts();
 
   } catch (error) {
-    alert(error.message);
+
+    alert(
+      error.message
+    );
   }
 }
 
@@ -789,8 +1032,12 @@ window.changeProductStatus =
    COPY CODE
 ========================================================= */
 
-async function copyVerificationCode(code) {
+async function copyVerificationCode(
+  code
+) {
+
   try {
+
     await navigator.clipboard.writeText(
       code
     );
@@ -801,6 +1048,7 @@ async function copyVerificationCode(code) {
     );
 
   } catch {
+
     prompt(
       "Copy this verification code:",
       code
@@ -815,23 +1063,34 @@ window.copyVerificationCode =
    SHOW QR
 ========================================================= */
 
-async function showProductQR(code) {
+async function showProductQR(
+  code
+) {
+
   try {
+
     const data =
       await api(
         "/api/products/" +
-        encodeURIComponent(code) +
+        encodeURIComponent(
+          code
+        ) +
         "/qr"
       );
 
     showQRModal({
       code,
-      url: data.url,
-      image: data.data
+      url:
+        data.url,
+      image:
+        data.data
     });
 
   } catch (error) {
-    alert(error.message);
+
+    alert(
+      error.message
+    );
   }
 }
 
@@ -847,10 +1106,13 @@ function showQRModal({
   url,
   image
 }) {
+
   removeQRModal();
 
   const modal =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   modal.id =
     "verifyitQRModal";
@@ -867,6 +1129,7 @@ function showQRModal({
   `;
 
   modal.innerHTML = `
+
     <div style="
       background:#fff;
       color:#111;
@@ -894,7 +1157,8 @@ function showQRModal({
       >
 
       <p>
-        <strong>Code:</strong><br>
+        <strong>Code:</strong>
+        <br>
         ${escapeHtml(code)}
       </p>
 
@@ -945,15 +1209,21 @@ function showQRModal({
     .addEventListener(
       "click",
       () => {
-        const link =
-          document.createElement("a");
 
-        link.href = image;
+        const link =
+          document.createElement(
+            "a"
+          );
+
+        link.href =
+          image;
 
         link.download =
           `verifyit-${code}.png`;
 
-        document.body.appendChild(link);
+        document.body.appendChild(
+          link
+        );
 
         link.click();
 
@@ -964,8 +1234,10 @@ function showQRModal({
   modal.addEventListener(
     "click",
     event => {
+
       if (
-        event.target === modal
+        event.target ===
+        modal
       ) {
         removeQRModal();
       }
@@ -974,6 +1246,7 @@ function showQRModal({
 }
 
 function removeQRModal() {
+
   const modal =
     $("verifyitQRModal");
 
@@ -989,6 +1262,7 @@ function removeQRModal() {
 let bulkProducts = [];
 
 function openBulkImport() {
+
   createBulkImportModal();
 }
 
@@ -996,10 +1270,13 @@ window.openBulkImport =
   openBulkImport;
 
 function createBulkImportModal() {
+
   removeBulkImportModal();
 
   const modal =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   modal.id =
     "verifyitBulkImportModal";
@@ -1017,6 +1294,7 @@ function createBulkImportModal() {
   `;
 
   modal.innerHTML = `
+
     <div style="
       background:#fff;
       color:#111;
@@ -1036,13 +1314,17 @@ function createBulkImportModal() {
       ">
 
         <div>
+
           <h2 style="margin:0;">
             BULK PRODUCT IMPORT
           </h2>
 
-          <p style="margin:6px 0 0;">
+          <p style="
+            margin:6px 0 0;
+          ">
             Import up to 50 products at once.
           </p>
+
         </div>
 
         <button
@@ -1080,13 +1362,17 @@ function createBulkImportModal() {
         ">
           Example:
           <br>
+
           <code>
             Brand A, Product One, BATCH-001
           </code>
+
           <br>
+
           <code>
             Brand A, Product Two, BATCH-002
           </code>
+
         </p>
 
       </div>
@@ -1190,7 +1476,10 @@ function createBulkImportModal() {
    READ BULK FILE
 ========================================================= */
 
-function handleBulkFile(event) {
+function handleBulkFile(
+  event
+) {
+
   const file =
     event.target.files?.[0];
 
@@ -1204,18 +1493,23 @@ function handleBulkFile(event) {
     new FileReader();
 
   reader.onload = () => {
+
     try {
+
       const text =
         String(
           reader.result || ""
         );
 
       bulkProducts =
-        parseCSVProducts(text);
+        parseCSVProducts(
+          text
+        );
 
       renderBulkPreview();
 
     } catch (error) {
+
       showBulkStatus(
         error.message,
         true
@@ -1224,52 +1518,71 @@ function handleBulkFile(event) {
   };
 
   reader.onerror = () => {
+
     showBulkStatus(
       "Unable to read the selected file.",
       true
     );
   };
 
-  reader.readAsText(file);
+  reader.readAsText(
+    file
+  );
 }
 
 /* =========================================================
    CSV PARSER
 ========================================================= */
 
-function parseCSVProducts(text) {
+function parseCSVProducts(
+  text
+) {
+
   const lines =
     text
-      .replace(/^\uFEFF/, "")
+      .replace(
+        /^\uFEFF/,
+        ""
+      )
       .split(/\r?\n/)
-      .map(line => line.trim())
+      .map(
+        line =>
+          line.trim()
+      )
       .filter(Boolean);
 
   if (!lines.length) {
+
     throw new Error(
       "The selected file is empty."
     );
   }
 
   const rows =
-    lines.map(parseCSVLine);
+    lines.map(
+      parseCSVLine
+    );
 
   let startIndex = 0;
 
   const first =
-    rows[0].map(value =>
-      value.toLowerCase().trim()
+    rows[0].map(
+      value =>
+        value
+          .toLowerCase()
+          .trim()
     );
 
   if (
-    first.some(value =>
-      [
-        "brand",
-        "product",
-        "product name",
-        "productname",
-        "batch"
-      ].includes(value)
+    first.some(
+      value =>
+        [
+          "brand",
+          "product",
+          "product name",
+          "productname",
+          "batch"
+        ].includes(value)
     )
   ) {
     startIndex = 1;
@@ -1282,20 +1595,28 @@ function parseCSVProducts(text) {
     i < rows.length;
     i++
   ) {
-    const row = rows[i];
+
+    const row =
+      rows[i];
 
     if (!row.length) {
       continue;
     }
 
     const brand =
-      String(row[0] || "").trim();
+      String(
+        row[0] || ""
+      ).trim();
 
     const productName =
-      String(row[1] || "").trim();
+      String(
+        row[1] || ""
+      ).trim();
 
     const batch =
-      String(row[2] || "").trim();
+      String(
+        row[2] || ""
+      ).trim();
 
     if (
       !brand &&
@@ -1306,12 +1627,14 @@ function parseCSVProducts(text) {
     }
 
     if (!brand) {
+
       throw new Error(
         `Row ${i + 1}: Brand is missing.`
       );
     }
 
     if (!productName) {
+
       throw new Error(
         `Row ${i + 1}: Product name is missing.`
       );
@@ -1325,12 +1648,14 @@ function parseCSVProducts(text) {
   }
 
   if (!products.length) {
+
     throw new Error(
       "No valid products were found."
     );
   }
 
   if (products.length > 50) {
+
     throw new Error(
       "Maximum 50 products per import."
     );
@@ -1339,17 +1664,25 @@ function parseCSVProducts(text) {
   return products;
 }
 
-function parseCSVLine(line) {
+function parseCSVLine(
+  line
+) {
+
   const result = [];
+
   let current = "";
-  let insideQuotes = false;
+
+  let insideQuotes =
+    false;
 
   for (
     let i = 0;
     i < line.length;
     i++
   ) {
-    const char = line[i];
+
+    const char =
+      line[i];
 
     if (char === '"') {
 
@@ -1357,8 +1690,11 @@ function parseCSVLine(line) {
         insideQuotes &&
         line[i + 1] === '"'
       ) {
+
         current += '"';
+
         i++;
+
         continue;
       }
 
@@ -1372,6 +1708,7 @@ function parseCSVLine(line) {
       char === "," &&
       !insideQuotes
     ) {
+
       result.push(
         current.trim()
       );
@@ -1396,28 +1733,42 @@ function parseCSVLine(line) {
 ========================================================= */
 
 function renderBulkPreview() {
+
   const preview =
     $("verifyitBulkPreview");
 
   const importButton =
     $("verifyitBulkImport");
 
-  if (!preview || !importButton) {
+  if (
+    !preview ||
+    !importButton
+  ) {
     return;
   }
 
   if (!bulkProducts.length) {
-    preview.innerHTML = "";
-    importButton.disabled = true;
+
+    preview.innerHTML =
+      "";
+
+    importButton.disabled =
+      true;
+
     return;
   }
 
-  importButton.disabled = false;
+  importButton.disabled =
+    false;
 
   const visibleProducts =
-    bulkProducts.slice(0, 10);
+    bulkProducts.slice(
+      0,
+      10
+    );
 
   preview.innerHTML = `
+
     <h3>
       Import Preview
     </h3>
@@ -1439,50 +1790,87 @@ function renderBulkPreview() {
       ">
 
         <thead>
+
           <tr>
-            <th style="padding:8px;text-align:left;">
+
+            <th style="
+              padding:8px;
+              text-align:left;
+            ">
               #
             </th>
 
-            <th style="padding:8px;text-align:left;">
+            <th style="
+              padding:8px;
+              text-align:left;
+            ">
               Brand
             </th>
 
-            <th style="padding:8px;text-align:left;">
+            <th style="
+              padding:8px;
+              text-align:left;
+            ">
               Product
             </th>
 
-            <th style="padding:8px;text-align:left;">
+            <th style="
+              padding:8px;
+              text-align:left;
+            ">
               Batch
             </th>
+
           </tr>
+
         </thead>
 
         <tbody>
 
-          ${visibleProducts.map(
-            (product, index) => `
+          ${visibleProducts
+            .map(
+              (
+                product,
+                index
+              ) => `
+
               <tr>
 
-                <td style="padding:8px;">
+                <td style="
+                  padding:8px;
+                ">
                   ${index + 1}
                 </td>
 
-                <td style="padding:8px;">
-                  ${escapeHtml(product.brand)}
+                <td style="
+                  padding:8px;
+                ">
+                  ${escapeHtml(
+                    product.brand
+                  )}
                 </td>
 
-                <td style="padding:8px;">
-                  ${escapeHtml(product.productName)}
+                <td style="
+                  padding:8px;
+                ">
+                  ${escapeHtml(
+                    product.productName
+                  )}
                 </td>
 
-                <td style="padding:8px;">
-                  ${escapeHtml(product.batch || "—")}
+                <td style="
+                  padding:8px;
+                ">
+                  ${escapeHtml(
+                    product.batch ||
+                    "—"
+                  )}
                 </td>
 
               </tr>
             `
-          ).join("")}
+            )
+            .join("")}
 
         </tbody>
 
@@ -1514,6 +1902,7 @@ function renderBulkPreview() {
 ========================================================= */
 
 async function submitBulkProducts() {
+
   if (!bulkProducts.length) {
     return;
   }
@@ -1525,7 +1914,8 @@ async function submitBulkProducts() {
     return;
   }
 
-  button.disabled = true;
+  button.disabled =
+    true;
 
   showBulkStatus(
     "Registering products and generating QR codes...",
@@ -1533,13 +1923,17 @@ async function submitBulkProducts() {
   );
 
   try {
+
     const data =
       await api(
         "/api/products/bulk",
         {
-          method: "POST",
+          method:
+            "POST",
+
           body: {
-            products: bulkProducts
+            products:
+              bulkProducts
           }
         }
       );
@@ -1565,7 +1959,8 @@ async function submitBulkProducts() {
       true
     );
 
-    button.disabled = false;
+    button.disabled =
+      false;
   }
 }
 
@@ -1573,7 +1968,10 @@ async function submitBulkProducts() {
    BULK RESULTS
 ========================================================= */
 
-function renderBulkResults(products) {
+function renderBulkResults(
+  products
+) {
+
   const container =
     $("verifyitBulkResults");
 
@@ -1582,6 +1980,7 @@ function renderBulkResults(products) {
   }
 
   container.innerHTML = `
+
     <h3>
       Generated Products
     </h3>
@@ -1597,8 +1996,10 @@ function renderBulkResults(products) {
       gap:10px;
     ">
 
-      ${products.map(
-        product => `
+      ${products
+        .map(
+          product => `
+
           <div style="
             border:1px solid #ddd;
             border-radius:10px;
@@ -1606,38 +2007,53 @@ function renderBulkResults(products) {
           ">
 
             <strong>
-              ${escapeHtml(product.brand)}
+              ${escapeHtml(
+                product.brand
+              )}
             </strong>
 
             <br>
 
-            ${escapeHtml(product.productName)}
+            ${escapeHtml(
+              product.productName
+            )}
 
             <br><br>
 
             <code>
-              ${escapeHtml(product.code)}
+              ${escapeHtml(
+                product.code
+              )}
             </code>
 
             <br><br>
 
             <button
               type="button"
-              onclick="showBulkQR('${escapeJs(product.code)}','${escapeJs(product.qrData)}','${escapeJs(product.qrUrl)}')"
+              onclick="showBulkQR('${escapeJs(
+                product.code
+              )}','${escapeJs(
+                product.qrData
+              )}','${escapeJs(
+                product.qrUrl
+              )}')"
             >
               View QR
             </button>
 
             <button
               type="button"
-              onclick="copyVerificationCode('${escapeJs(product.code)}')"
+              onclick="copyVerificationCode('${escapeJs(
+                product.code
+              )}')"
             >
               Copy Code
             </button>
 
           </div>
         `
-      ).join("")}
+        )
+        .join("")}
 
     </div>
   `;
@@ -1652,10 +2068,13 @@ function showBulkQR(
   qrData,
   qrUrl
 ) {
+
   showQRModal({
     code,
-    url: qrUrl,
-    image: qrData
+    url:
+      qrUrl,
+    image:
+      qrData
   });
 }
 
@@ -1670,6 +2089,7 @@ function showBulkStatus(
   message,
   isError
 ) {
+
   const box =
     $("verifyitBulkStatus");
 
@@ -1691,6 +2111,7 @@ function showBulkStatus(
 ========================================================= */
 
 function removeBulkImportModal() {
+
   const modal =
     $("verifyitBulkImportModal");
 
@@ -1709,6 +2130,7 @@ window.removeBulkImportModal =
 ========================================================= */
 
 function connectBulkButton() {
+
   const button =
     $("bulkImportButton");
 
@@ -1719,7 +2141,9 @@ function connectBulkButton() {
   button.addEventListener(
     "click",
     event => {
+
       event.preventDefault();
+
       openBulkImport();
     }
   );
@@ -1730,31 +2154,36 @@ function connectBulkButton() {
 ========================================================= */
 
 function connectBulkLinks() {
+
   document
     .querySelectorAll(
       'a[href="#bulk-import"]'
     )
-    .forEach(link => {
+    .forEach(
+      link => {
 
-      link.addEventListener(
-        "click",
-        event => {
-          event.preventDefault();
+        link.addEventListener(
+          "click",
+          event => {
 
-          const section =
-            $("bulk-import");
+            event.preventDefault();
 
-          if (section) {
-            section.scrollIntoView({
-              behavior: "smooth"
-            });
+            const section =
+              $("bulk-import");
+
+            if (section) {
+
+              section.scrollIntoView({
+                behavior:
+                  "smooth"
+              });
+            }
+
+            openBulkImport();
           }
-
-          openBulkImport();
-        }
-      );
-
-    });
+        );
+      }
+    );
 }
 
 /* =========================================================
@@ -1764,8 +2193,11 @@ function connectBulkLinks() {
 async function verifyProduct(
   code
 ) {
+
   const cleanCode =
-    String(code || "")
+    String(
+      code || ""
+    )
       .trim()
       .toUpperCase();
 
@@ -1774,6 +2206,7 @@ async function verifyProduct(
   }
 
   try {
+
     const data =
       await api(
         "/api/verify/" +
@@ -1789,8 +2222,12 @@ async function verifyProduct(
   } catch (error) {
 
     displayVerificationResult({
-      success: false,
-      result: "not_verified",
+      success:
+        false,
+
+      result:
+        "not_verified",
+
       message:
         error.message
     });
@@ -1807,12 +2244,14 @@ window.verifyProduct =
 function displayVerificationResult(
   data
 ) {
+
   const container =
     $("verificationResult") ||
     $("verifyResult") ||
     $("verificationResultArea");
 
   if (!container) {
+
     alert(
       data.message ||
       "Verification complete."
@@ -1825,29 +2264,40 @@ function displayVerificationResult(
     data.product || {};
 
   const isAuthentic =
-    data.result === "authentic";
+    data.result ===
+    "authentic";
 
   const isWarning =
-    data.result === "warning";
+    data.result ===
+    "warning";
 
   let title =
     "Product Not Verified";
 
   if (isAuthentic) {
+
     title =
       "Product Verified";
+
   } else if (isWarning) {
+
     title =
       "Verification Warning";
   }
 
-  container.hidden = false;
+  container.hidden =
+    false;
 
   container.innerHTML = `
-    <div class="verification-result">
+
+    <div
+      class="verification-result"
+    >
 
       <h2>
-        ${escapeHtml(title)}
+        ${escapeHtml(
+          title
+        )}
       </h2>
 
       <p>
@@ -1861,8 +2311,12 @@ function displayVerificationResult(
         product.brand
           ? `
             <p>
-              <strong>Brand:</strong>
-              ${escapeHtml(product.brand)}
+              <strong>
+                Brand:
+              </strong>
+              ${escapeHtml(
+                product.brand
+              )}
             </p>
           `
           : ""
@@ -1872,8 +2326,12 @@ function displayVerificationResult(
         product.productName
           ? `
             <p>
-              <strong>Product:</strong>
-              ${escapeHtml(product.productName)}
+              <strong>
+                Product:
+              </strong>
+              ${escapeHtml(
+                product.productName
+              )}
             </p>
           `
           : ""
@@ -1883,8 +2341,12 @@ function displayVerificationResult(
         product.batch
           ? `
             <p>
-              <strong>Batch:</strong>
-              ${escapeHtml(product.batch)}
+              <strong>
+                Batch:
+              </strong>
+              ${escapeHtml(
+                product.batch
+              )}
             </p>
           `
           : ""
@@ -1894,10 +2356,16 @@ function displayVerificationResult(
         product.code
           ? `
             <p>
-              <strong>Code:</strong>
+              <strong>
+                Code:
+              </strong>
+
               <code>
-                ${escapeHtml(product.code)}
+                ${escapeHtml(
+                  product.code
+                )}
               </code>
+
             </p>
           `
           : ""
@@ -1923,8 +2391,11 @@ function displayVerificationResult(
   `;
 
   container.scrollIntoView({
-    behavior: "smooth",
-    block: "center"
+    behavior:
+      "smooth",
+
+    block:
+      "center"
   });
 }
 
@@ -1933,6 +2404,7 @@ function displayVerificationResult(
 ========================================================= */
 
 function connectVerificationForm() {
+
   const form =
     $("verifyForm");
 
@@ -1943,6 +2415,7 @@ function connectVerificationForm() {
   form.addEventListener(
     "submit",
     async event => {
+
       event.preventDefault();
 
       const input =
@@ -1966,13 +2439,16 @@ function connectVerificationForm() {
 ========================================================= */
 
 function autoVerifyFromUrl() {
+
   const params =
     new URLSearchParams(
       window.location.search
     );
 
   const verifyCode =
-    params.get("verify");
+    params.get(
+      "verify"
+    );
 
   if (!verifyCode) {
     return;
@@ -1984,128 +2460,214 @@ function autoVerifyFromUrl() {
     $("codeInput");
 
   if (input) {
+
     input.value =
       verifyCode;
   }
 
-  setTimeout(() => {
-    verifyProduct(
-      verifyCode
-    );
-  }, 300);
+  setTimeout(
+    () => {
+
+      verifyProduct(
+        verifyCode
+      );
+
+    },
+    300
+  );
 }
 
 /* =========================================================
    HTML SAFETY HELPERS
 ========================================================= */
 
-function escapeHtml(value) {
+function escapeHtml(
+  value
+) {
+
   return String(
     value ?? ""
   )
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
 }
 
-function escapeJs(value) {
+function escapeJs(
+  value
+) {
+
   return String(
     value ?? ""
   )
-    .replaceAll("\\", "\\\\")
-    .replaceAll("'", "\\'")
-    .replaceAll("\n", "\\n")
-    .replaceAll("\r", "\\r");
+    .replaceAll(
+      "\\",
+      "\\\\"
+    )
+    .replaceAll(
+      "'",
+      "\\'"
+    )
+    .replaceAll(
+      "\n",
+      "\\n"
+    )
+    .replaceAll(
+      "\r",
+      "\\r"
+    );
 }
 
 /* =========================================================
    STARTUP
 ========================================================= */
 
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
+function startVerifyItApp() {
 
-    console.log(
-      "VerifyIt V1.6 app.js loaded."
+  console.log(
+    "VerifyIt V1.6 app.js loaded."
+  );
+
+  try {
+
+    connectLoginForm();
+
+  } catch (error) {
+
+    console.error(
+      "Login initialization error:",
+      error
     );
-
-    try {
-      connectLoginForm();
-    } catch (error) {
-      console.error(
-        "Login initialization error:",
-        error
-      );
-    }
-
-    try {
-      connectRegisterForm();
-    } catch (error) {
-      console.error(
-        "Register initialization error:",
-        error
-      );
-    }
-
-    try {
-      connectProductForm();
-    } catch (error) {
-      console.error(
-        "Product form initialization error:",
-        error
-      );
-    }
-
-    try {
-      connectBulkButton();
-    } catch (error) {
-      console.error(
-        "Bulk button initialization error:",
-        error
-      );
-    }
-
-    try {
-      connectBulkLinks();
-    } catch (error) {
-      console.error(
-        "Bulk links initialization error:",
-        error
-      );
-    }
-
-    try {
-      connectVerificationForm();
-    } catch (error) {
-      console.error(
-        "Verification initialization error:",
-        error
-      );
-    }
-
-    try {
-      loadCurrentUser();
-    } catch (error) {
-      console.error(
-        "Current user initialization error:",
-        error
-      );
-    }
-
-    try {
-      autoVerifyFromUrl();
-    } catch (error) {
-      console.error(
-        "Auto verification initialization error:",
-        error
-      );
-    }
-
   }
-);
-```
 
-After replacing it, **deploy that one file only**, then hard-refresh VerifyIt and press Login again. The corrected version also logs `VerifyIt: Login submitted.` in the browser console, so if it still doesn't respond, we'll know immediately whether the problem is the button/form or the `/api/login` request.
+  try {
+
+    connectRegisterForm();
+
+  } catch (error) {
+
+    console.error(
+      "Register initialization error:",
+      error
+    );
+  }
+
+  try {
+
+    connectProductForm();
+
+  } catch (error) {
+
+    console.error(
+      "Product form initialization error:",
+      error
+    );
+  }
+
+  try {
+
+    connectBulkButton();
+
+  } catch (error) {
+
+    console.error(
+      "Bulk button initialization error:",
+      error
+    );
+  }
+
+  try {
+
+    connectBulkLinks();
+
+  } catch (error) {
+
+    console.error(
+      "Bulk links initialization error:",
+      error
+    );
+  }
+
+  try {
+
+    connectVerificationForm();
+
+  } catch (error) {
+
+    console.error(
+      "Verification initialization error:",
+      error
+    );
+  }
+
+  try {
+
+    loadCurrentUser();
+
+  } catch (error) {
+
+    console.error(
+      "Current user initialization error:",
+      error
+    );
+  }
+
+  try {
+
+    autoVerifyFromUrl();
+
+  } catch (error) {
+
+    console.error(
+      "Auto verification initialization error:",
+      error
+    );
+  }
+}
+
+/*
+   IMPORTANT:
+
+   If app.js loads before DOMContentLoaded,
+   wait for the DOM.
+
+   If app.js loads after DOMContentLoaded,
+   start immediately.
+
+   This prevents the login form from
+   falling back to normal HTML submission.
+*/
+
+if (
+  document.readyState ===
+  "loading"
+) {
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    startVerifyItApp
+  );
+
+} else {
+
+  startVerifyItApp();
+
+}
+```
