@@ -2105,7 +2105,7 @@ app.get(
       id="status"
       class="status"
     >
-      Checking system status...
+      Enter your owner key to check system status.
     </div>
 
     <input
@@ -2157,6 +2157,25 @@ async function loadStatus() {
       "message"
     );
 
+  const keyInput =
+    document.getElementById(
+      "ownerKey"
+    );
+
+  const key =
+    keyInput.value;
+
+  if (!key) {
+
+    status.textContent =
+      "🔑 Enter your owner key to check status.";
+
+    message.textContent =
+      "";
+
+    return;
+  }
+
   status.textContent =
     "Checking system status...";
 
@@ -2167,7 +2186,15 @@ async function loadStatus() {
 
     const response =
       await fetch(
-        "/api/owner/lockdown-status"
+        "/api/owner/lockdown-status",
+        {
+          method: "GET",
+
+          headers: {
+            "x-verifyit-owner-key":
+              key
+          }
+        }
       );
 
     const data =
@@ -2269,8 +2296,11 @@ async function changeLock(
         ? "🔒 Lockdown activated successfully."
         : "🔓 VerifyIt restored successfully.";
 
-    keyInput.value =
-      "";
+    /*
+      Keep the key in the field so that
+      loadStatus() can immediately authenticate
+      the follow-up status request.
+    */
 
     await loadStatus();
 
@@ -2282,8 +2312,6 @@ async function changeLock(
   }
 }
 
-
-loadStatus();
 
 </script>
 
