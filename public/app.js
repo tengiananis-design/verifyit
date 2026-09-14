@@ -1,4 +1,4 @@
-```javascript
+
 /* =========================================================
    VERIFYIT V1.6
    Partner Dashboard + Bulk Product Import
@@ -2670,4 +2670,3 @@ if (
   startVerifyItApp();
 
 }
-```
