@@ -1,1094 +1,947 @@
-<!DOCTYPE html>
+```html
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+
+  <meta charset="utf-8">
 
   <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0"
+    content="width=device-width,initial-scale=1"
   >
 
   <meta
     name="description"
-    content="VerifyIt — Product authenticity and verification infrastructure for brands."
+    content="VerifyIt helps brands give products a unique digital identity that customers can check by QR code or verification code."
   >
 
   <title>VerifyIt — Product Verification</title>
 
-  <link rel="stylesheet" href="/style.css?v=10">
+  <link
+    rel="stylesheet"
+    href="/style.css?v=10"
+  >
 
-  <style>
-    .business-login-link {
-      background:#101828;
-      color:#fff !important;
-      padding:9px 14px;
-      border-radius:9px;
-    }
-
-    .business-login-link:hover {
-      opacity:.9;
-    }
-
-    .dashboard-link {
-      display:none;
-    }
-
-    .dashboard-link.show {
-      display:inline-block;
-    }
-
-    .login-highlight {
-      border:1px solid #d0d5dd;
-      box-shadow:0 12px 35px rgba(16,24,40,.06);
-    }
-
-    .qr-preview {
-      max-width:180px;
-      border-radius:12px;
-      border:1px solid #e5e7eb;
-      padding:8px;
-      background:#fff;
-    }
-
-    .bulk-note {
-      margin-top:15px;
-      padding:14px;
-      border-radius:11px;
-      background:#f7f8fa;
-      color:#69707c;
-      font-size:13px;
-      line-height:1.5;
-    }
-
-    @media(max-width:520px) {
-      .business-login-link {
-        padding:7px 9px;
-      }
-    }
-  </style>
 </head>
 
 <body>
 
-  <!-- =====================================================
-       HEADER
-       ===================================================== -->
+<header>
 
-  <header>
+  <div class="brand">
+    <div class="brand-mark">✓</div>
+    VerifyIt
+  </div>
 
-    <a href="#" class="brand">
-      <span class="brand-mark">✓</span>
-      VerifyIt
-    </a>
+  <nav>
+    <a href="#verify">Verify</a>
+    <a href="#business">For Businesses</a>
+    <a href="#about">About</a>
+  </nav>
 
-    <nav>
-
-      <a href="#verify">
-        Verify
-      </a>
-
-      <a href="#features">
-        Features
-      </a>
-
-      <a
-        href="#business-login"
-        class="business-login-link"
-      >
-        Business Login
-      </a>
-
-    </nav>
-
-  </header>
+</header>
 
 
-  <!-- =====================================================
-       MAIN
-       ===================================================== -->
+<main>
 
-  <main>
+  <!-- =========================================
+       HERO
+  ========================================== -->
 
+  <section class="hero">
 
-    <!-- ===================================================
-         HERO
-         =================================================== -->
+    <div>
 
-    <section class="hero">
+      <div class="pill">
+        PRODUCT AUTHENTICITY INFRASTRUCTURE
+      </div>
 
-      <div>
+      <h1>
+        Know what you're buying.
+      </h1>
 
-        <div class="eyebrow">
-          PRODUCT AUTHENTICITY INFRASTRUCTURE
-        </div>
+      <p>
+        VerifyIt gives products a unique digital identity
+        that customers can check using a simple verification code.
+      </p>
 
-        <h1>
-          Know what's real.
-        </h1>
+      <div class="hero-actions">
 
-        <p>
-          Verify products instantly and give customers
-          confidence with secure product verification
-          built for modern brands.
-        </p>
+        <a
+          href="#verify"
+          class="button"
+        >
+          Verify a Product
+        </a>
 
-        <div class="hero-actions">
-
-          <a
-            href="#verify"
-            class="button"
-          >
-            Verify a Product
-          </a>
-
-          <a
-            href="#business-login"
-            class="text-link"
-          >
-            For Businesses →
-          </a>
-
-        </div>
-
-        <p class="disclaimer">
-          VerifyIt helps brands register products and lets
-          customers check their authenticity using a unique
-          verification code.
-        </p>
+        <a
+          href="#business"
+          class="text-link"
+        >
+          For businesses →
+        </a>
 
       </div>
 
+      <p class="disclaimer">
+        VerifyIt confirms whether a product code is registered
+        in the VerifyIt database. Registration does not by itself
+        guarantee product quality or safety.
+      </p>
 
-      <div class="card hero-card">
+    </div>
 
-        <div class="scan-icon">
-          ✓
-        </div>
 
-        <div class="mini-label">
-          LIVE VERIFICATION
-        </div>
+    <div class="card hero-card">
+
+      <div class="scan-icon">
+        ✓
+      </div>
+
+      <div class="mini-label">
+        LIVE VERIFICATION
+      </div>
+
+      <h3>
+        Check a product
+      </h3>
+
+      <p>
+        Enter the verification code found on a registered product.
+      </p>
+
+      <div class="demo-code">
+        VERIFY-2026-001
+      </div>
+
+      <div class="status-chip">
+        ✓ Registered product
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <!-- =========================================
+       VERIFY
+  ========================================== -->
+
+  <section
+    id="verify"
+    class="section"
+  >
+
+    <div class="section-heading">
+
+      <div class="eyebrow">
+        CUSTOMER VERIFICATION
+      </div>
+
+      <h2>
+        Verify a Product
+      </h2>
+
+      <p>
+        Enter the product verification code below
+        to check whether it is registered.
+      </p>
+
+    </div>
+
+
+    <form
+      id="verifyForm"
+      class="form verify-form"
+    >
+
+      <input
+        id="verifyCode"
+        type="text"
+        placeholder="Enter verification code"
+        autocomplete="off"
+        required
+      >
+
+      <button
+        type="submit"
+        class="button"
+      >
+        Verify Product
+      </button>
+
+    </form>
+
+
+    <div id="verifyResult"></div>
+
+  </section>
+
+
+  <!-- =========================================
+       FEATURES
+  ========================================== -->
+
+  <section class="section alt">
+
+    <div class="section-heading">
+
+      <div class="eyebrow">
+        HOW VERIFYIT WORKS
+      </div>
+
+      <h2>
+        A simple digital identity for products.
+      </h2>
+
+      <p>
+        Businesses register their products and customers
+        can independently check their authenticity status.
+      </p>
+
+    </div>
+
+
+    <div class="feature-grid">
+
+      <div class="feature-card">
+
+        <b>01</b>
 
         <h3>
-          Product verified
+          Register
         </h3>
 
         <p>
-          Check a product's registration status using
-          its unique VerifyIt code.
+          Businesses create a digital record for each product.
         </p>
-
-        <div class="demo-code">
-          VERIFY-7X92-K4M8
-        </div>
-
-        <span class="status-chip">
-          Authentic
-        </span>
 
       </div>
 
-    </section>
+
+      <div class="feature-card">
+
+        <b>02</b>
+
+        <h3>
+          Identify
+        </h3>
+
+        <p>
+          Each registered product receives a unique verification code.
+        </p>
+
+      </div>
 
 
-    <!-- ===================================================
-         PUBLIC VERIFICATION
-         =================================================== -->
+      <div class="feature-card">
 
-    <section
-      id="verify"
-      class="section"
+        <b>03</b>
+
+        <h3>
+          Verify
+        </h3>
+
+        <p>
+          Customers enter the code to check the product.
+        </p>
+
+      </div>
+
+
+      <div class="feature-card">
+
+        <b>04</b>
+
+        <h3>
+          Trust
+        </h3>
+
+        <p>
+          Registered product information can be displayed during verification.
+        </p>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <!-- =========================================
+       BUSINESS
+  ========================================== -->
+
+  <section
+    id="business"
+    class="section"
+  >
+
+    <div class="section-heading">
+
+      <div class="eyebrow">
+        FOR BUSINESSES
+      </div>
+
+      <h2>
+        Give your products a digital identity.
+      </h2>
+
+      <p>
+        Create a business account to register products,
+        manage verification codes and monitor customer checks.
+      </p>
+
+    </div>
+
+
+    <!-- =====================================
+         AUTH
+    ====================================== -->
+
+    <div
+      id="authArea"
+      class="auth-grid"
     >
 
-      <div class="section-heading">
+      <div class="card form-card">
+
+        <h3>
+          Login
+        </h3>
+
+        <form id="loginForm">
+
+          <input
+            id="loginEmail"
+            type="email"
+            placeholder="Email"
+            autocomplete="email"
+            required
+          >
+
+          <input
+            id="loginPassword"
+            type="password"
+            placeholder="Password"
+            autocomplete="current-password"
+            required
+          >
+
+          <button
+            type="submit"
+            class="button"
+          >
+            Login
+          </button>
+
+        </form>
+
+      </div>
+
+
+      <div class="card form-card">
+
+        <h3>
+          Create Business Account
+        </h3>
+
+        <form id="registerForm">
+
+          <input
+            id="registerName"
+            type="text"
+            placeholder="Business name"
+            required
+          >
+
+          <input
+            id="registerEmail"
+            type="email"
+            placeholder="Email"
+            autocomplete="email"
+            required
+          >
+
+          <input
+            id="registerPassword"
+            type="password"
+            placeholder="Password — 8+ characters"
+            autocomplete="new-password"
+            minlength="8"
+            required
+          >
+
+          <button
+            type="submit"
+            class="button"
+          >
+            Create Account
+          </button>
+
+        </form>
+
+      </div>
+
+    </div>
+
+
+    <!-- =====================================
+         DASHBOARD
+    ====================================== -->
+
+    <div
+      id="dashboard"
+      hidden
+    >
+
+      <!-- DASHBOARD HEADER -->
+
+      <div class="dash-head">
+
+        <div>
+
+          <div class="eyebrow">
+            BUSINESS DASHBOARD
+          </div>
+
+          <h2 id="businessName">
+            Dashboard
+          </h2>
+
+          <p
+            id="businessEmail"
+            class="muted"
+          ></p>
+
+        </div>
+
+
+        <button
+          id="logoutButton"
+          class="button secondary small"
+          type="button"
+        >
+          Logout
+        </button>
+
+      </div>
+
+
+      <!-- ===================================
+           PARTNER OVERVIEW
+      ==================================== -->
+
+      <div class="partner-overview">
+
+        <div class="partner-overview-copy">
+
+          <div class="eyebrow">
+            VERIFYIT PARTNER
+          </div>
+
+          <h3>
+            Your products. Your digital identity.
+          </h3>
+
+          <p>
+            Manage registered products, verification activity
+            and customer trust from one place.
+          </p>
+
+        </div>
+
+        <div class="partner-badge">
+          ✓ Active Partner
+        </div>
+
+      </div>
+
+
+      <!-- ===================================
+           STATS
+      ==================================== -->
+
+      <div class="stats">
+
+        <div>
+
+          <b id="productCount">
+            0
+          </b>
+
+          <span>
+            Products
+          </span>
+
+        </div>
+
+
+        <div>
+
+          <b id="checkCount">
+            0
+          </b>
+
+          <span>
+            Total checks
+          </span>
+
+        </div>
+
+
+        <div>
+
+          <b id="warningCount">
+            0
+          </b>
+
+          <span>
+            Warnings
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <!-- ===================================
+           QUICK ACTIONS
+      ==================================== -->
+
+      <div class="section-heading compact-heading">
 
         <div class="eyebrow">
-          CUSTOMER VERIFICATION
+          QUICK ACTIONS
         </div>
 
         <h2>
-          Verify a product
+          Manage VerifyIt
+        </h2>
+
+      </div>
+
+
+      <div class="quick-actions">
+
+        <a
+          href="#register-product"
+          class="quick-action"
+        >
+
+          <span class="quick-action-icon">
+            +
+          </span>
+
+          <strong>
+            Register Product
+          </strong>
+
+          <small>
+            Add a new product
+          </small>
+
+        </a>
+
+
+        <a
+          href="#bulk-import"
+          class="quick-action"
+        >
+
+          <span class="quick-action-icon">
+            ⇧
+          </span>
+
+          <strong>
+            Bulk Products
+          </strong>
+
+          <small>
+            Import multiple products
+          </small>
+
+        </a>
+
+
+        <a
+          href="#product-catalog"
+          class="quick-action"
+        >
+
+          <span class="quick-action-icon">
+            □
+          </span>
+
+          <strong>
+            Product Catalog
+          </strong>
+
+          <small>
+            Manage registered products
+          </small>
+
+        </a>
+
+
+        <a
+          href="#partner-tools"
+          class="quick-action"
+        >
+
+          <span class="quick-action-icon">
+            ◇
+          </span>
+
+          <strong>
+            Partner Tools
+          </strong>
+
+          <small>
+            Branding and business tools
+          </small>
+
+        </a>
+
+      </div>
+
+
+      <!-- ===================================
+           REGISTER PRODUCT
+      ==================================== -->
+
+      <div
+        id="register-product"
+        class="section-heading"
+      >
+
+        <div class="eyebrow">
+          PRODUCT MANAGEMENT
+        </div>
+
+        <h2>
+          Register Product
         </h2>
 
         <p>
-          Enter the verification code printed on the product
-          or provided by the brand.
+          Add a product and optionally upload a clear image
+          of the actual product.
         </p>
 
       </div>
 
 
       <form
-        id="verifyForm"
-        class="form verify-form"
+        id="productForm"
+        class="card form-card"
       >
 
         <input
+          id="productBrand"
           type="text"
-          id="verifyCode"
-          name="verifyCode"
-          placeholder="Enter verification code"
-          autocomplete="off"
+          placeholder="Brand"
           required
         >
+
+        <input
+          id="productName"
+          type="text"
+          placeholder="Product name"
+          required
+        >
+
+        <input
+          id="productBatch"
+          type="text"
+          placeholder="Batch / Lot number (optional)"
+        >
+
+        <label class="image-upload">
+
+          <span>
+            Actual product image (optional)
+          </span>
+
+          <input
+            id="productImage"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+          >
+
+          <small>
+            Use a clear photo of the actual product.
+            VerifyIt will resize it automatically.
+          </small>
+
+        </label>
+
+
+        <div
+          id="imagePreview"
+          class="image-preview"
+          hidden
+        >
+
+          <img
+            id="productImagePreview"
+            alt="Product preview"
+          >
+
+        </div>
+
 
         <button
           type="submit"
           class="button"
         >
-          Verify
+          Register Product
         </button>
 
       </form>
 
 
-      <div
-        id="verificationResult"
-        class="result"
-      ></div>
-
-    </section>
-
-
-    <!-- ===================================================
-         FEATURES
-         =================================================== -->
-
-    <section
-      id="features"
-      class="section alt"
-    >
-
-      <div class="section-heading">
-
-        <div class="eyebrow">
-          BUILT FOR TRUST
-        </div>
-
-        <h2>
-          Verification without the friction.
-        </h2>
-
-        <p>
-          VerifyIt gives businesses the tools to register,
-          manage and protect their products while giving
-          customers a simple way to check authenticity.
-        </p>
-
-      </div>
-
-
-      <div class="feature-grid">
-
-
-        <div class="feature-card">
-
-          <b>01</b>
-
-          <h3>
-            Product Codes
-          </h3>
-
-          <p>
-            Every registered product receives a unique
-            verification code.
-          </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-          <b>02</b>
-
-          <h3>
-            QR Verification
-          </h3>
-
-          <p>
-            Generate QR codes that take customers directly
-            to the product verification page.
-          </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-          <b>03</b>
-
-          <h3>
-            Product Management
-          </h3>
-
-          <p>
-            Businesses can register, manage and monitor
-            their products from one dashboard.
-          </p>
-
-        </div>
-
-
-        <div class="feature-card">
-
-          <b>04</b>
-
-          <h3>
-            Bulk Registration
-          </h3>
-
-          <p>
-            Register multiple products at once using the
-            VerifyIt partner tools.
-          </p>
-
-        </div>
-
-
-      </div>
-
-    </section>
-
-
-    <!-- ===================================================
-         BUSINESS AREA
-         =================================================== -->
-
-    <section
-      id="business"
-      class="section"
-    >
-
-      <div id="authArea">
-
-
-        <div
-          id="business-login"
-          class="section-heading"
-        >
-
-          <div class="eyebrow">
-            VERIFYIT FOR BUSINESS
-          </div>
-
-          <h2>
-            Protect your products.
-          </h2>
-
-          <p>
-            Login to your business account or create one
-            to start registering your products.
-          </p>
-
-        </div>
-
-
-        <div class="auth-grid">
-
-
-          <!-- =============================================
-               LOGIN
-               ============================================= -->
-
-          <div class="card form-card login-highlight">
-
-            <div class="eyebrow">
-              EXISTING PARTNER
-            </div>
-
-            <h3>
-              Business Login
-            </h3>
-
-            <p class="muted">
-              Access your VerifyIt business dashboard.
-            </p>
-
-
-            <form id="loginForm">
-
-              <input
-                type="email"
-                id="loginEmail"
-                name="loginEmail"
-                placeholder="Email address"
-                autocomplete="email"
-                required
-              >
-
-              <input
-                type="password"
-                id="loginPassword"
-                name="loginPassword"
-                placeholder="Password"
-                autocomplete="current-password"
-                required
-              >
-
-              <button
-                type="submit"
-                class="button"
-              >
-                Login
-              </button>
-
-            </form>
-
-          </div>
-
-
-          <!-- =============================================
-               REGISTER
-               ============================================= -->
-
-          <div class="card form-card">
-
-            <div class="eyebrow">
-              NEW PARTNER
-            </div>
-
-            <h3>
-              Create an account
-            </h3>
-
-            <p class="muted">
-              Start building your verified product catalog.
-            </p>
-
-
-            <form id="registerForm">
-
-              <input
-                type="text"
-                id="registerName"
-                name="registerName"
-                placeholder="Business name"
-                autocomplete="organization"
-                required
-              >
-
-              <input
-                type="email"
-                id="registerEmail"
-                name="registerEmail"
-                placeholder="Email address"
-                autocomplete="email"
-                required
-              >
-
-              <input
-                type="password"
-                id="registerPassword"
-                name="registerPassword"
-                placeholder="Create password"
-                autocomplete="new-password"
-                required
-              >
-
-              <button
-                type="submit"
-                class="button"
-              >
-                Create Account
-              </button>
-
-            </form>
-
-          </div>
-
-
-        </div>
-
-      </div>
-
-
-      <!-- =================================================
-           BUSINESS DASHBOARD
-           ================================================= -->
+      <!-- ===================================
+           BULK IMPORT
+      ==================================== -->
 
       <div
-        id="dashboard"
-        class="hidden"
+        id="bulk-import"
+        class="partner-tool-card"
       >
 
+        <div class="eyebrow">
+          BULK PRODUCT IMPORT
+        </div>
 
-        <!-- DASHBOARD HEADER -->
+        <h3>
+          Add multiple products at once.
+        </h3>
 
-        <div class="dash-head">
+        <p>
+          Prepare your product catalog for faster onboarding.
+          Import multiple products and generate verification
+          codes and QR data automatically.
+        </p>
+
+
+        <div class="bulk-import-box">
 
           <div>
 
-            <div class="eyebrow">
-              BUSINESS DASHBOARD
-            </div>
+            <strong>
+              CSV / Excel import
+            </strong>
 
-            <h2 id="businessName">
-              Your Business
-            </h2>
-
-            <p
-              id="businessEmail"
-              class="muted"
-            ></p>
+            <small>
+              Brand • Product • Batch
+            </small>
 
           </div>
 
 
           <button
+            id="bulkImportButton"
+            class="button secondary small"
             type="button"
-            class="button secondary"
-            onclick="logout()"
           >
-            Logout
+            Import Products
           </button>
 
         </div>
 
-
-        <!-- ===============================================
-             DASHBOARD STATS
-             =============================================== -->
-
-        <div class="stats">
-
-          <div>
-
-            <b id="productCount">
-              0
-            </b>
-
-            <span>
-              Products
-            </span>
-
-          </div>
+      </div>
 
 
-          <div>
+      <!-- ===================================
+           PRODUCTS
+      ==================================== -->
 
-            <b id="checkCount">
-              0
-            </b>
+      <div
+        id="product-catalog"
+        class="section-heading"
+      >
 
-            <span>
-              Total Checks
-            </span>
-
-          </div>
-
-
-          <div>
-
-            <b id="warningCount">
-              0
-            </b>
-
-            <span>
-              Warnings
-            </span>
-
-          </div>
-
+        <div class="eyebrow">
+          REGISTERED PRODUCTS
         </div>
 
-
-        <!-- ===============================================
-             DASHBOARD ACTIONS
-             =============================================== -->
-
-        <div class="feature-grid">
-
-
-          <a
-            href="#register-product"
-            class="feature-card"
-            style="text-decoration:none;color:inherit"
-          >
-
-            <b>01</b>
-
-            <h3>
-              Register Product
-            </h3>
-
-            <p>
-              Add a single product to your verified catalog.
-            </p>
-
-          </a>
-
-
-          <a
-            href="#bulk-import"
-            class="feature-card"
-            style="text-decoration:none;color:inherit"
-          >
-
-            <b>02</b>
-
-            <h3>
-              Bulk Products
-            </h3>
-
-            <p>
-              Import multiple products and generate QR codes.
-            </p>
-
-          </a>
-
-
-          <a
-            href="#product-catalog"
-            class="feature-card"
-            style="text-decoration:none;color:inherit"
-          >
-
-            <b>03</b>
-
-            <h3>
-              Product Catalog
-            </h3>
-
-            <p>
-              View and manage your registered products.
-            </p>
-
-          </a>
-
-
-          <a
-            href="#partner-tools"
-            class="feature-card"
-            style="text-decoration:none;color:inherit"
-          >
-
-            <b>04</b>
-
-            <h3>
-              Partner Tools
-            </h3>
-
-            <p>
-              Brand and verification tools.
-            </p>
-
-          </a>
-
-
-        </div>
-
-
-        <!-- ===============================================
-             REGISTER PRODUCT
-             =============================================== -->
 
         <div
-          id="register-product"
-          class="section"
-          style="margin:30px 0 0"
+          class="dash-head"
+          style="margin-top:8px"
         >
 
-          <div class="section-heading">
-
-            <div class="eyebrow">
-              PRODUCT MANAGEMENT
-            </div>
+          <div>
 
             <h2>
-              Register a product
+              Your Products
             </h2>
-
-            <p>
-              Create a unique VerifyIt identity for your
-              product.
-            </p>
-
-          </div>
-
-
-          <form
-            id="productForm"
-            class="form-card card"
-          >
-
-            <input
-              type="text"
-              id="productBrand"
-              name="productBrand"
-              placeholder="Brand"
-              required
-            >
-
-            <input
-              type="text"
-              id="productName"
-              name="productName"
-              placeholder="Product name"
-              required
-            >
-
-            <input
-              type="text"
-              id="productBatch"
-              name="productBatch"
-              placeholder="Batch / Lot number (optional)"
-            >
-
-            <input
-              type="file"
-              id="productImage"
-              name="productImage"
-              accept="image/*"
-            >
-
-            <button
-              type="submit"
-              class="button"
-            >
-              Register Product
-            </button>
-
-          </form>
-
-        </div>
-
-
-        <!-- ===============================================
-             BULK IMPORT
-             =============================================== -->
-
-        <div
-          id="bulk-import"
-          class="section"
-          style="margin:30px 0 0"
-        >
-
-          <div class="section-heading">
-
-            <div class="eyebrow">
-              V1.6 PARTNER TOOL
-            </div>
-
-            <h2>
-              Bulk product registration
-            </h2>
-
-            <p>
-              Register multiple products in one workflow.
-              Upload your product list, review it, then let
-              VerifyIt generate unique verification codes
-              and QR codes automatically.
-            </p>
-
-          </div>
-
-
-          <div class="feature-grid">
-
-
-            <div class="feature-card">
-
-              <b>CSV</b>
-
-              <h3>
-                Import your list
-              </h3>
-
-              <p>
-                Prepare a CSV containing Brand, Product
-                and Batch information.
-              </p>
-
-            </div>
-
-
-            <div class="feature-card">
-
-              <b>50</b>
-
-              <h3>
-                Products per batch
-              </h3>
-
-              <p>
-                Import up to 50 products in one registration
-                batch.
-              </p>
-
-            </div>
-
-
-            <div class="feature-card">
-
-              <b>QR</b>
-
-              <h3>
-                Automatic QR
-              </h3>
-
-              <p>
-                Every registered product receives its own
-                verification QR code.
-              </p>
-
-            </div>
-
-
-            <div class="feature-card">
-
-              <b>LIVE</b>
-
-              <h3>
-                Instant verification
-              </h3>
-
-              <p>
-                Customers can verify products immediately
-                after registration.
-              </p>
-
-            </div>
-
-
-          </div>
-
-
-          <div class="bulk-note">
-
-            <strong>
-              Bulk import workflow
-            </strong>
-
-            <br>
-
-            Upload your CSV, review the products, then
-            register them together. VerifyIt will create
-            unique verification codes and QR codes for
-            every product.
-
-          </div>
-
-
-          <div style="margin-top:25px">
-
-            <button
-              type="button"
-              id="bulkImportButton"
-              class="button"
-            >
-              Import Products
-            </button>
-
-          </div>
-
-        </div>
-
-
-        <!-- ===============================================
-             PRODUCT CATALOG
-             =============================================== -->
-
-        <div
-          id="product-catalog"
-          class="section"
-          style="margin:30px 0 0"
-        >
-
-          <div class="dash-head">
-
-            <div>
-
-              <div class="eyebrow">
-                YOUR PRODUCTS
-              </div>
-
-              <h2>
-                Product Catalog
-              </h2>
-
-              <p class="muted">
-                Manage your registered products.
-              </p>
-
-            </div>
-
-
-            <button
-              type="button"
-              class="button secondary"
-              onclick="loadProducts()"
-            >
-              Refresh
-            </button>
-
-          </div>
-
-
-          <div
-            id="productList"
-            style="margin-top:20px"
-          >
 
             <p class="muted">
-              Your registered products will appear here.
-            </p>
-
-          </div>
-
-        </div>
-
-
-        <!-- ===============================================
-             PARTNER TOOLS
-             =============================================== -->
-
-        <div
-          id="partner-tools"
-          class="section"
-          style="margin:30px 0 0"
-        >
-
-          <div class="section-heading">
-
-            <div class="eyebrow">
-              PARTNER PLATFORM
-            </div>
-
-            <h2>
-              Built for growing brands.
-            </h2>
-
-            <p>
-              VerifyIt's partner platform will continue
-              expanding with tools designed around
-              product trust.
+              Manage verification codes, images,
+              status and QR codes.
             </p>
 
           </div>
 
 
-          <div class="feature-grid">
+          <button
+            id="refreshProducts"
+            class="button secondary small"
+            type="button"
+            onclick="loadProducts()"
+          >
+            Refresh
+          </button>
+
+        </div>
+
+      </div>
 
 
-            <div class="feature-card">
-
-              <b>V1.6</b>
-
-              <h3>
-                Brand Profile
-              </h3>
-
-              <p>
-                A dedicated verified profile for your brand
-                and products.
-              </p>
-
-            </div>
+      <div id="productList"></div>
 
 
-            <div class="feature-card">
+      <!-- ===================================
+           PARTNER TOOLS
+      ==================================== -->
 
-              <b>V1.6</b>
+      <div
+        id="partner-tools"
+        class="section-heading"
+      >
 
-              <h3>
-                Verification Analytics
-              </h3>
+        <div class="eyebrow">
+          PARTNER TOOLS
+        </div>
 
-              <p>
-                Understand how customers interact with
-                your registered products.
-              </p>
+        <h2>
+          Build your brand presence.
+        </h2>
 
-            </div>
+        <p>
+          These tools are being prepared for VerifyIt
+          partner businesses.
+        </p>
 
-
-            <div class="feature-card">
-
-              <b>V1.7</b>
-
-              <h3>
-                Suspicious Activity
-              </h3>
-
-              <p>
-                Identify unusual verification patterns and
-                potentially suspicious activity.
-              </p>
-
-            </div>
+      </div>
 
 
-            <div class="feature-card">
+      <div class="partner-tools-grid">
 
-              <b>COMING</b>
+        <div class="partner-tool-card">
 
-              <h3>
-                More Partner Tools
-              </h3>
+          <span class="tool-icon">
+            🏷️
+          </span>
 
-              <p>
-                VerifyIt will continue evolving into a
-                complete product trust platform.
-              </p>
+          <h3>
+            Brand Profile
+          </h3>
 
-            </div>
+          <p>
+            Add your company identity and branding
+            to your VerifyIt experience.
+          </p>
 
-
-          </div>
+          <span class="tool-status">
+            Coming in V1.6
+          </span>
 
         </div>
 
 
+        <div class="partner-tool-card">
+
+          <span class="tool-icon">
+            📈
+          </span>
+
+          <h3>
+            Verification Analytics
+          </h3>
+
+          <p>
+            Understand how customers interact
+            with your registered products.
+          </p>
+
+          <span class="tool-status">
+            Coming in V1.6
+          </span>
+
+        </div>
+
+
+        <div class="partner-tool-card">
+
+          <span class="tool-icon">
+            🚨
+          </span>
+
+          <h3>
+            Suspicious Activity
+          </h3>
+
+          <p>
+            Identify products receiving unusually
+            high verification activity.
+          </p>
+
+          <span class="tool-status">
+            Coming in V1.7
+          </span>
+
+        </div>
+
       </div>
 
-    </section>
+    </div>
+
+  </section>
 
 
-    <!-- ===================================================
-         FINAL SECTION
-         =================================================== -->
+  <!-- =========================================
+       ABOUT
+  ========================================== -->
 
-    <section class="section final-note">
+  <section
+    id="about"
+    class="section final-note"
+  >
 
-      <div class="eyebrow">
-        VERIFYIT
-      </div>
+    <div class="eyebrow">
+      VERIFYIT
+    </div>
 
-      <h2>
-        Trust should be easy to verify.
-      </h2>
+    <h2>
+      Building trust between brands and customers.
+    </h2>
 
-      <p>
-        VerifyIt connects brands and customers through
-        simple, secure product verification.
-      </p>
+    <p>
+      VerifyIt is designed to give physical products
+      a simple digital identity that customers can check
+      before making a purchase or accepting a product.
+    </p>
 
-    </section>
+  </section>
 
-
-  </main>
-
-
-  <!-- =====================================================
-       FOOTER
-       ===================================================== -->
-
-  <footer>
-
-    VerifyIt V1.6 Partner Ready
-
-    <br>
-
-    Product verification infrastructure for brands.
-
-  </footer>
+</main>
 
 
-  <!-- =====================================================
-       APPLICATION
-       ===================================================== -->
+<footer>
+  VerifyIt V1.6 Partner Ready •
+  Product verification infrastructure for brands
+</footer>
 
-  <script src="/app.js?v=10"></script>
+
+<!-- =========================================
+     CACHE-BUSTED APPLICATION SCRIPT
+     IMPORTANT: v=11
+========================================== -->
+
+<script src="/app.js?v=11"></script>
 
 </body>
 </html>
+```
