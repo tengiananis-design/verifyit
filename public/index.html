@@ -1,14 +1,8 @@
-```html
 <!doctype html>
 <html lang="en">
 <head>
-
   <meta charset="utf-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1"
-  >
+  <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <meta
     name="description"
@@ -17,17 +11,12 @@
 
   <title>VerifyIt — Product Verification</title>
 
-  <link
-    rel="stylesheet"
-    href="/style.css?v=10"
-  >
-
+  <link rel="stylesheet" href="/style.css?v=10">
 </head>
 
 <body>
 
 <header>
-
   <div class="brand">
     <div class="brand-mark">✓</div>
     VerifyIt
@@ -38,20 +27,14 @@
     <a href="#business">For Businesses</a>
     <a href="#about">About</a>
   </nav>
-
 </header>
-
 
 <main>
 
-  <!-- =========================================
-       HERO
-  ========================================== -->
-
+  <!-- HERO -->
   <section class="hero">
 
     <div>
-
       <div class="pill">
         PRODUCT AUTHENTICITY INFRASTRUCTURE
       </div>
@@ -66,21 +49,13 @@
       </p>
 
       <div class="hero-actions">
-
-        <a
-          href="#verify"
-          class="button"
-        >
+        <a href="#verify" class="button">
           Verify a Product
         </a>
 
-        <a
-          href="#business"
-          class="text-link"
-        >
+        <a href="#business" class="text-link">
           For businesses →
         </a>
-
       </div>
 
       <p class="disclaimer">
@@ -88,9 +63,7 @@
         in the VerifyIt database. Registration does not by itself
         guarantee product quality or safety.
       </p>
-
     </div>
-
 
     <div class="card hero-card">
 
@@ -123,14 +96,8 @@
   </section>
 
 
-  <!-- =========================================
-       VERIFY
-  ========================================== -->
-
-  <section
-    id="verify"
-    class="section"
-  >
+  <!-- VERIFY -->
+  <section id="verify" class="section">
 
     <div class="section-heading">
 
@@ -149,11 +116,7 @@
 
     </div>
 
-
-    <form
-      id="verifyForm"
-      class="form verify-form"
-    >
+    <form id="verifyForm" class="form verify-form">
 
       <input
         id="verifyCode"
@@ -172,16 +135,12 @@
 
     </form>
 
-
     <div id="verifyResult"></div>
 
   </section>
 
 
-  <!-- =========================================
-       FEATURES
-  ========================================== -->
-
+  <!-- FEATURES -->
   <section class="section alt">
 
     <div class="section-heading">
@@ -201,11 +160,9 @@
 
     </div>
 
-
     <div class="feature-grid">
 
       <div class="feature-card">
-
         <b>01</b>
 
         <h3>
@@ -215,12 +172,9 @@
         <p>
           Businesses create a digital record for each product.
         </p>
-
       </div>
 
-
       <div class="feature-card">
-
         <b>02</b>
 
         <h3>
@@ -230,12 +184,9 @@
         <p>
           Each registered product receives a unique verification code.
         </p>
-
       </div>
 
-
       <div class="feature-card">
-
         <b>03</b>
 
         <h3>
@@ -245,12 +196,9 @@
         <p>
           Customers enter the code to check the product.
         </p>
-
       </div>
 
-
       <div class="feature-card">
-
         <b>04</b>
 
         <h3>
@@ -260,7 +208,6 @@
         <p>
           Registered product information can be displayed during verification.
         </p>
-
       </div>
 
     </div>
@@ -268,14 +215,8 @@
   </section>
 
 
-  <!-- =========================================
-       BUSINESS
-  ========================================== -->
-
-  <section
-    id="business"
-    class="section"
-  >
+  <!-- BUSINESS -->
+  <section id="business" class="section">
 
     <div class="section-heading">
 
@@ -295,14 +236,8 @@
     </div>
 
 
-    <!-- =====================================
-         AUTH
-    ====================================== -->
-
-    <div
-      id="authArea"
-      class="auth-grid"
-    >
+    <!-- AUTH -->
+    <div id="authArea" class="auth-grid">
 
       <div class="card form-card">
 
@@ -386,16 +321,8 @@
     </div>
 
 
-    <!-- =====================================
-         DASHBOARD
-    ====================================== -->
-
-    <div
-      id="dashboard"
-      hidden
-    >
-
-      <!-- DASHBOARD HEADER -->
+    <!-- DASHBOARD -->
+    <div id="dashboard" hidden>
 
       <div class="dash-head">
 
@@ -409,13 +336,9 @@
             Dashboard
           </h2>
 
-          <p
-            id="businessEmail"
-            class="muted"
-          ></p>
+          <p id="businessEmail" class="muted"></p>
 
         </div>
-
 
         <button
           id="logoutButton"
@@ -428,10 +351,7 @@
       </div>
 
 
-      <!-- ===================================
-           PARTNER OVERVIEW
-      ==================================== -->
-
+      <!-- PARTNER OVERVIEW -->
       <div class="partner-overview">
 
         <div class="partner-overview-copy">
@@ -458,57 +378,37 @@
       </div>
 
 
-      <!-- ===================================
-           STATS
-      ==================================== -->
-
+      <!-- STATS -->
       <div class="stats">
 
         <div>
-
-          <b id="productCount">
-            0
-          </b>
+          <b id="productCount">0</b>
 
           <span>
             Products
           </span>
-
         </div>
 
-
         <div>
-
-          <b id="checkCount">
-            0
-          </b>
+          <b id="checkCount">0</b>
 
           <span>
             Total checks
           </span>
-
         </div>
 
-
         <div>
-
-          <b id="warningCount">
-            0
-          </b>
+          <b id="warningCount">0</b>
 
           <span>
             Warnings
           </span>
-
         </div>
 
       </div>
 
 
-      <!-- ===================================
-           QUICK ACTIONS
-      ==================================== -->
-
+      <!-- QUICK ACTIONS -->
       <div class="section-heading compact-heading">
 
         <div class="eyebrow">
@@ -520,7 +420,6 @@
         </h2>
 
       </div>
-
 
       <div class="quick-actions">
 
@@ -543,7 +442,6 @@
 
         </a>
 
-
         <a
           href="#bulk-import"
           class="quick-action"
@@ -563,7 +461,6 @@
 
         </a>
 
-
         <a
           href="#product-catalog"
           class="quick-action"
@@ -582,7 +479,6 @@
           </small>
 
         </a>
-
 
         <a
           href="#partner-tools"
@@ -606,10 +502,7 @@
       </div>
 
 
-      <!-- ===================================
-           REGISTER PRODUCT
-      ==================================== -->
-
+      <!-- REGISTER PRODUCT -->
       <div
         id="register-product"
         class="section-heading"
@@ -629,7 +522,6 @@
         </p>
 
       </div>
-
 
       <form
         id="productForm"
@@ -675,7 +567,6 @@
 
         </label>
 
-
         <div
           id="imagePreview"
           class="image-preview"
@@ -689,7 +580,6 @@
 
         </div>
 
-
         <button
           type="submit"
           class="button"
@@ -700,10 +590,7 @@
       </form>
 
 
-      <!-- ===================================
-           BULK IMPORT
-      ==================================== -->
-
+      <!-- BULK IMPORT -->
       <div
         id="bulk-import"
         class="partner-tool-card"
@@ -723,7 +610,6 @@
           codes and QR data automatically.
         </p>
 
-
         <div class="bulk-import-box">
 
           <div>
@@ -738,7 +624,6 @@
 
           </div>
 
-
           <button
             id="bulkImportButton"
             class="button secondary small"
@@ -752,10 +637,7 @@
       </div>
 
 
-      <!-- ===================================
-           PRODUCTS
-      ==================================== -->
-
+      <!-- PRODUCTS -->
       <div
         id="product-catalog"
         class="section-heading"
@@ -764,7 +646,6 @@
         <div class="eyebrow">
           REGISTERED PRODUCTS
         </div>
-
 
         <div
           class="dash-head"
@@ -784,7 +665,6 @@
 
           </div>
 
-
           <button
             id="refreshProducts"
             class="button secondary small"
@@ -798,14 +678,10 @@
 
       </div>
 
-
       <div id="productList"></div>
 
 
-      <!-- ===================================
-           PARTNER TOOLS
-      ==================================== -->
-
+      <!-- PARTNER TOOLS -->
       <div
         id="partner-tools"
         class="section-heading"
@@ -825,7 +701,6 @@
         </p>
 
       </div>
-
 
       <div class="partner-tools-grid">
 
@@ -850,7 +725,6 @@
 
         </div>
 
-
         <div class="partner-tool-card">
 
           <span class="tool-icon">
@@ -871,7 +745,6 @@
           </span>
 
         </div>
-
 
         <div class="partner-tool-card">
 
@@ -901,10 +774,7 @@
   </section>
 
 
-  <!-- =========================================
-       ABOUT
-  ========================================== -->
-
+  <!-- ABOUT -->
   <section
     id="about"
     class="section final-note"
@@ -935,13 +805,7 @@
 </footer>
 
 
-<!-- =========================================
-     CACHE-BUSTED APPLICATION SCRIPT
-     IMPORTANT: v=11
-========================================== -->
-
 <script src="/app.js?v=11"></script>
 
 </body>
 </html>
-```
