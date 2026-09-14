@@ -1,21 +1,16 @@
-const $ = id =>
-  document.getElementById(id);
-
 /* =========================================================
-   VERIFYIT APP.JS
-   V1.5 LOCK IN COMPATIBLE
-   V1.6 READY
+   VERIFYIT V1.6
+   Partner Dashboard + Bulk Product Import
 ========================================================= */
 
+const $ = id => document.getElementById(id);
 
 /* =========================================================
    API HELPER
 ========================================================= */
 
 async function api(url, options = {}) {
-
-  const token =
-    localStorage.getItem("verifyit_token");
+  const token = localStorage.getItem("verifyit_token");
 
   const headers = {
     ...(options.headers || {})
@@ -25,63 +20,32 @@ async function api(url, options = {}) {
     options.body &&
     typeof options.body !== "string"
   ) {
-    headers["Content-Type"] =
-      "application/json";
-
-    options.body =
-      JSON.stringify(options.body);
+    headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(options.body);
   }
 
   if (token) {
-    headers.Authorization =
-      `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  let response;
-
-  try {
-
-    response =
-      await fetch(
-        url,
-        {
-          ...options,
-          headers
-        }
-      );
-
-  } catch (error) {
-
-    throw new Error(
-      "Network error. Please check your connection."
-    );
-  }
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
 
   let data = {};
 
   try {
-
-    data =
-      await response.json();
-
+    data = await response.json();
   } catch {
-
     data = {};
   }
 
   if (!response.ok) {
-
-    /*
-      IMPORTANT:
-      Lockdown is NOT an expired login.
-      Never delete the user's token here.
-    */
-
     if (
       response.status === 503 &&
       data.locked
     ) {
-
       throw new Error(
         "VerifyIt is currently under lockdown."
       );
@@ -96,232 +60,160 @@ async function api(url, options = {}) {
   return data;
 }
 
-
 /* =========================================================
    IMAGE COMPRESSION
 ========================================================= */
 
 function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
 
-  return new Promise(
-    (resolve, reject) => {
+    reader.onload = () => {
+      const image = new Image();
 
-      const reader =
-        new FileReader();
+      image.onload = () => {
+        const maxSize = 1200;
 
-      reader.onload =
-        () => {
+        let width = image.width;
+        let height = image.height;
 
-          const image =
-            new Image();
+        if (
+          width > maxSize ||
+          height > maxSize
+        ) {
+          if (width > height) {
+            height = Math.round(
+              height * (maxSize / width)
+            );
 
-          image.onload =
-            () => {
+            width = maxSize;
+          } else {
+            width = Math.round(
+              width * (maxSize / height)
+            );
 
-              const maxSize =
-                1200;
+            height = maxSize;
+          }
+        }
 
-              let width =
-                image.width;
+        const canvas =
+          document.createElement("canvas");
 
-              let height =
-                image.height;
+        canvas.width = width;
+        canvas.height = height;
 
-              if (
-                width > maxSize ||
-                height > maxSize
-              ) {
+        const ctx =
+          canvas.getContext("2d");
 
-                if (
-                  width > height
-                ) {
+        ctx.drawImage(
+          image,
+          0,
+          0,
+          width,
+          height
+        );
 
-                  height =
-                    Math.round(
-                      height *
-                      (
-                        maxSize /
-                        width
-                      )
-                    );
+        resolve(
+          canvas.toDataURL(
+            "image/jpeg",
+            0.78
+          )
+        );
+      };
 
-                  width =
-                    maxSize;
+      image.onerror = () => {
+        reject(
+          new Error(
+            "Unable to read image."
+          )
+        );
+      };
 
-                } else {
+      image.src = reader.result;
+    };
 
-                  width =
-                    Math.round(
-                      width *
-                      (
-                        maxSize /
-                        height
-                      )
-                    );
+    reader.onerror = () => {
+      reject(
+        new Error(
+          "Unable to load image."
+        )
+      );
+    };
 
-                  height =
-                    maxSize;
-                }
-              }
-
-              const canvas =
-                document.createElement(
-                  "canvas"
-                );
-
-              canvas.width =
-                width;
-
-              canvas.height =
-                height;
-
-              const ctx =
-                canvas.getContext(
-                  "2d"
-                );
-
-              ctx.drawImage(
-                image,
-                0,
-                0,
-                width,
-                height
-              );
-
-              resolve(
-                canvas.toDataURL(
-                  "image/jpeg",
-                  0.78
-                )
-              );
-            };
-
-          image.onerror =
-            () =>
-              reject(
-                new Error(
-                  "Unable to read image."
-                )
-              );
-
-          image.src =
-            reader.result;
-        };
-
-      reader.onerror =
-        () =>
-          reject(
-            new Error(
-              "Unable to load image."
-            )
-          );
-
-      reader.readAsDataURL(file);
-    }
-  );
+    reader.readAsDataURL(file);
+  });
 }
-
 
 /* =========================================================
    AUTH DISPLAY
 ========================================================= */
 
 function showDashboard(business) {
-
   if ($("authArea")) {
-
-    $("authArea").hidden =
-      true;
+    $("authArea").hidden = true;
   }
 
   if ($("dashboard")) {
-
-    $("dashboard").hidden =
-      false;
+    $("dashboard").hidden = false;
   }
 
   if ($("businessName")) {
-
-    $("businessName")
-      .textContent =
+    $("businessName").textContent =
       business?.name ||
       "Business Dashboard";
   }
 
   if ($("businessEmail")) {
-
-    $("businessEmail")
-      .textContent =
-      business?.email ||
-      "";
+    $("businessEmail").textContent =
+      business?.email || "";
   }
 
   loadDashboard();
 }
 
-
 function showAuth() {
-
   if ($("authArea")) {
-
-    $("authArea").hidden =
-      false;
+    $("authArea").hidden = false;
   }
 
   if ($("dashboard")) {
-
-    $("dashboard").hidden =
-      true;
+    $("dashboard").hidden = true;
   }
 }
-
 
 /* =========================================================
    CURRENT USER
 ========================================================= */
 
 async function loadCurrentUser() {
-
   const token =
     localStorage.getItem(
       "verifyit_token"
     );
 
   if (!token) {
-
     showAuth();
-
     return;
   }
 
   try {
-
     const business =
-      await api(
-        "/api/me"
-      );
+      await api("/api/me");
 
-    showDashboard(
-      business
-    );
-
+    showDashboard(business);
   } catch (error) {
 
     /*
-      Lockdown does not invalidate
-      the current session.
+      Do not destroy the token simply because
+      VerifyIt is temporarily locked.
     */
-
     if (
       error.message ===
       "VerifyIt is currently under lockdown."
     ) {
-
       showDashboard({
-        name:
-          "VerifyIt Partner",
-        email:
-          ""
+        name: "VerifyIt Partner",
+        email: ""
       });
 
       return;
@@ -335,288 +227,214 @@ async function loadCurrentUser() {
   }
 }
 
-
 /* =========================================================
    REGISTER
 ========================================================= */
 
 if ($("registerForm")) {
+  $("registerForm").addEventListener(
+    "submit",
+    async event => {
+      event.preventDefault();
 
-  $("registerForm")
-    .addEventListener(
-      "submit",
-      async event => {
+      try {
+        const data =
+          await api("/api/register", {
+            method: "POST",
+            body: {
+              name:
+                $("registerName")
+                  .value
+                  .trim(),
 
-        event.preventDefault();
+              email:
+                $("registerEmail")
+                  .value
+                  .trim(),
 
-        try {
+              password:
+                $("registerPassword")
+                  .value
+            }
+          });
 
-          const data =
-            await api(
-              "/api/register",
-              {
-                method:
-                  "POST",
+        localStorage.setItem(
+          "verifyit_token",
+          data.token
+        );
 
-                body: {
+        showDashboard(
+          data.business
+        );
 
-                  name:
-                    $("registerName")
-                      ?.value
-                      .trim(),
-
-                  email:
-                    $("registerEmail")
-                      ?.value
-                      .trim(),
-
-                  password:
-                    $("registerPassword")
-                      ?.value
-                }
-              }
-            );
-
-          localStorage.setItem(
-            "verifyit_token",
-            data.token
-          );
-
-          showDashboard(
-            data.business
-          );
-
-        } catch (error) {
-
-          alert(
-            error.message
-          );
-        }
+      } catch (error) {
+        alert(error.message);
       }
-    );
+    }
+  );
 }
-
 
 /* =========================================================
    LOGIN
 ========================================================= */
 
 if ($("loginForm")) {
+  $("loginForm").addEventListener(
+    "submit",
+    async event => {
+      event.preventDefault();
 
-  $("loginForm")
-    .addEventListener(
-      "submit",
-      async event => {
+      try {
+        const data =
+          await api("/api/login", {
+            method: "POST",
+            body: {
+              email:
+                $("loginEmail")
+                  .value
+                  .trim(),
 
-        event.preventDefault();
+              password:
+                $("loginPassword")
+                  .value
+            }
+          });
 
-        try {
+        localStorage.setItem(
+          "verifyit_token",
+          data.token
+        );
 
-          const data =
-            await api(
-              "/api/login",
-              {
-                method:
-                  "POST",
+        showDashboard(
+          data.business
+        );
 
-                body: {
-
-                  email:
-                    $("loginEmail")
-                      ?.value
-                      .trim(),
-
-                  password:
-                    $("loginPassword")
-                      ?.value
-                }
-              }
-            );
-
-          localStorage.setItem(
-            "verifyit_token",
-            data.token
-          );
-
-          showDashboard(
-            data.business
-          );
-
-        } catch (error) {
-
-          alert(
-            error.message
-          );
-        }
+      } catch (error) {
+        alert(error.message);
       }
-    );
+    }
+  );
 }
-
 
 /* =========================================================
    LOGOUT
 ========================================================= */
 
 function logout() {
-
   localStorage.removeItem(
     "verifyit_token"
   );
 
   showAuth();
 
-  window.location.hash =
-    "business";
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 }
 
-
-if ($("logoutButton")) {
-
-  $("logoutButton")
-    .addEventListener(
-      "click",
-      logout
-    );
-}
-
+window.logout = logout;
 
 /* =========================================================
-   REGISTER PRODUCT
+   SINGLE PRODUCT REGISTRATION
 ========================================================= */
 
 if ($("productForm")) {
+  $("productForm").addEventListener(
+    "submit",
+    async event => {
+      event.preventDefault();
 
-  $("productForm")
-    .addEventListener(
-      "submit",
-      async event => {
+      try {
+        let imageData = "";
 
-        event.preventDefault();
+        const imageInput =
+          $("productImage");
 
-        const button =
-          event.submitter ||
-          $("registerProductButton");
-
-        if (button) {
-
-          button.disabled =
-            true;
-        }
-
-        try {
-
-          let imageData =
-            null;
-
-          const imageInput =
-            $("productImage");
-
-          if (
-            imageInput &&
-            imageInput.files &&
-            imageInput.files.length
-          ) {
-
-            imageData =
-              await compressImage(
-                imageInput.files[0]
-              );
-          }
-
-          const data =
-            await api(
-              "/api/products",
-              {
-                method:
-                  "POST",
-
-                body: {
-
-                  brand:
-                    $("productBrand")
-                      ?.value
-                      .trim(),
-
-                  productName:
-                    $("productName")
-                      ?.value
-                      .trim(),
-
-                  batch:
-                    $("productBatch")
-                      ?.value
-                      .trim(),
-
-                  imageData
-                }
-              }
+        if (
+          imageInput &&
+          imageInput.files &&
+          imageInput.files[0]
+        ) {
+          imageData =
+            await compressImage(
+              imageInput.files[0]
             );
-
-          alert(
-            "Product registered successfully.\n\nVerification Code: " +
-            (
-              data.product?.code ||
-              data.code ||
-              "Generated"
-            )
-          );
-
-          event.target.reset();
-
-          await loadDashboard();
-
-        } catch (error) {
-
-          alert(
-            error.message
-          );
-
-        } finally {
-
-          if (button) {
-
-            button.disabled =
-              false;
-          }
         }
-      }
-    );
-}
 
+        const data =
+          await api("/api/products", {
+            method: "POST",
+            body: {
+              brand:
+                $("productBrand")
+                  .value
+                  .trim(),
+
+              productName:
+                $("productName")
+                  .value
+                  .trim(),
+
+              batch:
+                $("productBatch")
+                  ? $("productBatch")
+                      .value
+                      .trim()
+                  : "",
+
+              imageData
+            }
+          });
+
+        alert(
+          "Product registered successfully.\n\n" +
+          "VerifyIt Code: " +
+          data.product.code
+        );
+
+        $("productForm").reset();
+
+        await loadProducts();
+        await loadStats();
+
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+  );
+}
 
 /* =========================================================
    LOAD PRODUCTS
 ========================================================= */
 
 async function loadProducts() {
-
-  const container =
-    $("productCatalog");
-
-  if (!container) {
-    return;
-  }
-
   try {
-
     const data =
-      await api(
-        "/api/products"
-      );
+      await api("/api/products");
 
     const products =
-      Array.isArray(data)
-        ? data
-        : (
-            data.products ||
-            []
-          );
+      data.products || [];
+
+    /*
+      Try several common catalog container IDs
+      so the existing V1.6 HTML remains compatible.
+    */
+    const container =
+      $("productList") ||
+      $("productsList") ||
+      $("catalogList") ||
+      $("productCatalog");
+
+    if (!container) {
+      return;
+    }
 
     if (!products.length) {
-
       container.innerHTML = `
         <div class="empty-state">
-          <p>No products registered yet.</p>
+          No products registered yet.
         </div>
       `;
 
@@ -624,245 +442,205 @@ async function loadProducts() {
     }
 
     container.innerHTML =
-      products
-        .map(product => {
+      products.map(product => `
+        <div class="product-card"
+             data-code="${escapeHtml(product.code)}">
 
-          const image =
-            product.image_data ||
-            product.imageData;
+          <div class="product-card-header">
+            <strong>
+              ${escapeHtml(product.brand)}
+            </strong>
 
-          const status =
-            product.status ||
-            "active";
+            <span class="product-status">
+              ${escapeHtml(product.status)}
+            </span>
+          </div>
 
-          const checks =
-            product.verification_count ||
-            0;
+          <div class="product-card-body">
 
-          return `
-            <div class="product-card">
-
-              ${
-                image
-                  ? `
-                    <img
-                      src="${image}"
-                      alt="${escapeHtml(
-                        product.product_name ||
-                        product.productName ||
-                        "Product"
-                      )}"
-                      class="product-image"
-                    >
-                  `
-                  : ""
-              }
-
-              <div class="product-info">
-
-                <h3>
-                  ${escapeHtml(
-                    product.product_name ||
-                    product.productName ||
-                    "Unnamed Product"
-                  )}
-                </h3>
-
-                <p>
-                  <strong>Brand:</strong>
-                  ${escapeHtml(
-                    product.brand || ""
-                  )}
-                </p>
-
-                <p>
-                  <strong>Batch:</strong>
-                  ${escapeHtml(
-                    product.batch || ""
-                  )}
-                </p>
-
-                <p>
-                  <strong>Code:</strong>
-                  <span class="product-code">
-                    ${escapeHtml(
-                      product.code || ""
-                    )}
-                  </span>
-                </p>
-
-                <p>
-                  <strong>Status:</strong>
-                  ${escapeHtml(status)}
-                </p>
-
-                <p>
-                  <strong>Verification Checks:</strong>
-                  ${checks}
-                </p>
-
-                <div class="product-actions">
-
-                  <button
-                    type="button"
-                    onclick="generateQR('${escapeJs(
-                      product.code || ""
-                    )}')"
-                  >
-                    QR Code
-                  </button>
-
-                  <button
-                    type="button"
-                    onclick="changeProductStatus(
-                      '${escapeJs(
-                        product.code || ""
-                      )}',
-                      '${status === "active"
-                        ? "disabled"
-                        : "active"}'
-                    )"
-                  >
-                    ${
-                      status === "active"
-                        ? "Disable"
-                        : "Activate"
-                    }
-                  </button>
-
-                  <button
-                    type="button"
-                    onclick="deleteProduct(
-                      '${escapeJs(
-                        product.code || ""
-                      )}'
-                    )"
-                  >
-                    Delete
-                  </button>
-
-                </div>
-
-              </div>
-
+            <div>
+              <strong>Product</strong><br>
+              ${escapeHtml(product.productName)}
             </div>
-          `;
 
-        })
-        .join("");
+            <div>
+              <strong>Batch</strong><br>
+              ${escapeHtml(product.batch || "—")}
+            </div>
 
-  } catch (error) {
+            <div>
+              <strong>Code</strong><br>
+              <code>
+                ${escapeHtml(product.code)}
+              </code>
+            </div>
 
-    container.innerHTML = `
-      <div class="error-state">
-        ${escapeHtml(
-          error.message
-        )}
-      </div>
-    `;
-  }
-}
+            <div>
+              <strong>Checks</strong><br>
+              ${Number(product.verificationCount || 0)}
+            </div>
 
+          </div>
 
-/* =========================================================
-   DASHBOARD STATS
-========================================================= */
+          <div class="product-card-actions">
 
-async function loadStats() {
+            <button
+              type="button"
+              onclick="showProductQR('${escapeJs(product.code)}')"
+            >
+              QR
+            </button>
 
-  try {
+            <button
+              type="button"
+              onclick="copyVerificationCode('${escapeJs(product.code)}')"
+            >
+              Copy Code
+            </button>
 
-    const data =
-      await api(
-        "/api/stats"
-      );
+            <button
+              type="button"
+              onclick="changeProductStatus('${escapeJs(product.code)}','disabled')"
+            >
+              Disable
+            </button>
 
-    const products =
-      data.products ??
-      data.totalProducts ??
-      data.total_products ??
-      0;
+            <button
+              type="button"
+              onclick="deleteProduct('${escapeJs(product.code)}')"
+            >
+              Delete
+            </button>
 
-    const checks =
-      data.totalChecks ??
-      data.total_checks ??
-      data.verifications ??
-      0;
+          </div>
 
-    const warnings =
-      data.warnings ??
-      data.warningCount ??
-      0;
-
-    if ($("productCount")) {
-
-      $("productCount")
-        .textContent =
-        products;
-    }
-
-    if ($("totalChecks")) {
-
-      $("totalChecks")
-        .textContent =
-        checks;
-    }
-
-    if ($("warningCount")) {
-
-      $("warningCount")
-        .textContent =
-        warnings;
-    }
+        </div>
+      `).join("");
 
   } catch (error) {
 
-    /*
-      Stats failure should not
-      break the dashboard.
-    */
+    if (
+      error.message ===
+      "VerifyIt is currently under lockdown."
+    ) {
+      return;
+    }
 
-    console.warn(
-      "Unable to load stats:",
-      error.message
+    console.error(
+      "Unable to load products:",
+      error
     );
   }
 }
 
+/* =========================================================
+   LOAD DASHBOARD STATS
+========================================================= */
+
+async function loadStats() {
+  try {
+    const data =
+      await api("/api/stats");
+
+    /*
+      Support the existing dashboard IDs.
+    */
+
+    if ($("productCount")) {
+      $("productCount").textContent =
+        data.products ?? 0;
+    }
+
+    if ($("totalProducts")) {
+      $("totalProducts").textContent =
+        data.products ?? 0;
+    }
+
+    if ($("checkCount")) {
+      $("checkCount").textContent =
+        data.totalChecks ?? 0;
+    }
+
+    if ($("totalChecks")) {
+      $("totalChecks").textContent =
+        data.totalChecks ?? 0;
+    }
+
+    if ($("warningCount")) {
+      $("warningCount").textContent =
+        data.warnings ?? 0;
+    }
+
+    if ($("totalWarnings")) {
+      $("totalWarnings").textContent =
+        data.warnings ?? 0;
+    }
+
+  } catch (error) {
+    console.error(
+      "Stats error:",
+      error
+    );
+  }
+}
 
 /* =========================================================
    DASHBOARD LOADER
 ========================================================= */
 
 async function loadDashboard() {
-
   await Promise.allSettled([
-    loadProducts(),
-    loadStats()
+    loadStats(),
+    loadProducts()
   ]);
 }
 
-
 /* =========================================================
-   REFRESH CATALOG
+   REFRESH PRODUCTS
 ========================================================= */
 
-async function refreshCatalog() {
-
-  await loadProducts();
-  await loadStats();
+function refreshProducts() {
+  loadProducts();
+  loadStats();
 }
 
+window.refreshProducts =
+  refreshProducts;
 
-if ($("refreshProductsButton")) {
+/* =========================================================
+   DELETE PRODUCT
+========================================================= */
 
-  $("refreshProductsButton")
-    .addEventListener(
-      "click",
-      refreshCatalog
+async function deleteProduct(code) {
+  const confirmed =
+    confirm(
+      "Delete this product?\n\n" +
+      "This action cannot be undone."
     );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await api(
+      "/api/products/" +
+      encodeURIComponent(code),
+      {
+        method: "DELETE"
+      }
+    );
+
+    await loadProducts();
+    await loadStats();
+
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
+window.deleteProduct =
+  deleteProduct;
 
 /* =========================================================
    CHANGE PRODUCT STATUS
@@ -872,490 +650,1294 @@ async function changeProductStatus(
   code,
   status
 ) {
-
-  if (!code) {
-    return;
-  }
-
   try {
-
     await api(
-      `/api/products/${encodeURIComponent(code)}/status`,
+      "/api/products/" +
+      encodeURIComponent(code) +
+      "/status",
       {
-        method:
-          "PATCH",
-
+        method: "PATCH",
         body: {
           status
         }
       }
     );
 
-    await loadDashboard();
+    await loadProducts();
 
   } catch (error) {
+    alert(error.message);
+  }
+}
+
+window.changeProductStatus =
+  changeProductStatus;
+
+/* =========================================================
+   COPY CODE
+========================================================= */
+
+async function copyVerificationCode(code) {
+  try {
+    await navigator.clipboard.writeText(
+      code
+    );
 
     alert(
-      error.message
+      "Verification code copied:\n\n" +
+      code
+    );
+
+  } catch {
+    prompt(
+      "Copy this verification code:",
+      code
     );
   }
 }
 
+window.copyVerificationCode =
+  copyVerificationCode;
 
 /* =========================================================
-   DELETE PRODUCT
+   SHOW QR
 ========================================================= */
 
-async function deleteProduct(
-  code
-) {
-
-  if (!code) {
-    return;
-  }
-
-  const confirmed =
-    confirm(
-      "Delete this product permanently?"
-    );
-
-  if (!confirmed) {
-    return;
-  }
-
+async function showProductQR(code) {
   try {
-
-    await api(
-      `/api/products/${encodeURIComponent(code)}`,
-      {
-        method:
-          "DELETE"
-      }
-    );
-
-    await loadDashboard();
-
-  } catch (error) {
-
-    alert(
-      error.message
-    );
-  }
-}
-
-
-/* =========================================================
-   GENERATE QR
-========================================================= */
-
-async function generateQR(
-  code
-) {
-
-  if (!code) {
-    return;
-  }
-
-  try {
-
     const data =
       await api(
-        `/api/products/${encodeURIComponent(code)}/qr`
+        "/api/products/" +
+        encodeURIComponent(code) +
+        "/qr"
       );
 
-    const qr =
-      data.qr ||
-      data.qrCode ||
-      data.dataUrl ||
-      data.dataURL;
-
-    if (!qr) {
-
-      throw new Error(
-        "QR code was not returned by the server."
-      );
-    }
-
-    /*
-      Use a temporary modal-like
-      browser window so we don't
-      depend on additional HTML.
-    */
-
-    const popup =
-      window.open(
-        "",
-        "_blank",
-        "width=500,height=600"
-      );
-
-    if (!popup) {
-
-      throw new Error(
-        "Please allow pop-ups to view the QR code."
-      );
-    }
-
-    popup.document.write(`
-      <!DOCTYPE html>
-
-      <html>
-
-      <head>
-
-        <title>VerifyIt QR Code</title>
-
-        <style>
-
-          body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 30px;
-          }
-
-          img {
-            max-width: 350px;
-            width: 90%;
-          }
-
-          button {
-            margin-top: 20px;
-            padding: 10px 18px;
-            cursor: pointer;
-          }
-
-        </style>
-
-      </head>
-
-      <body>
-
-        <h2>VerifyIt QR Code</h2>
-
-        <p>
-          Product Code:
-          <strong>
-            ${escapeHtml(code)}
-          </strong>
-        </p>
-
-        <img
-          src="${escapeHtml(qr)}"
-          alt="VerifyIt QR Code"
-        >
-
-        <br>
-
-        <button
-          onclick="window.print()"
-        >
-          Print QR Code
-        </button>
-
-      </body>
-
-      </html>
-    `);
-
-    popup.document.close();
+    showQRModal({
+      code,
+      url: data.url,
+      image: data.data
+    });
 
   } catch (error) {
-
-    alert(
-      error.message
-    );
+    alert(error.message);
   }
 }
 
+window.showProductQR =
+  showProductQR;
 
 /* =========================================================
-   PUBLIC PRODUCT VERIFICATION
+   QR MODAL
 ========================================================= */
 
-if ($("verifyForm")) {
+function showQRModal({
+  code,
+  url,
+  image
+}) {
+  removeQRModal();
 
-  $("verifyForm")
+  const modal =
+    document.createElement("div");
+
+  modal.id =
+    "verifyitQRModal";
+
+  modal.style.cssText = `
+    position:fixed;
+    inset:0;
+    z-index:99999;
+    background:rgba(0,0,0,.82);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  `;
+
+  modal.innerHTML = `
+    <div style="
+      background:#fff;
+      color:#111;
+      width:min(420px,100%);
+      border-radius:16px;
+      padding:24px;
+      text-align:center;
+      box-sizing:border-box;
+    ">
+
+      <h2 style="margin-top:0;">
+        VerifyIt QR Code
+      </h2>
+
+      <img
+        src="${image}"
+        alt="VerifyIt QR Code"
+        style="
+          width:280px;
+          max-width:100%;
+          height:auto;
+          display:block;
+          margin:15px auto;
+        "
+      >
+
+      <p>
+        <strong>Code:</strong><br>
+        ${escapeHtml(code)}
+      </p>
+
+      <p style="
+        font-size:12px;
+        word-break:break-all;
+      ">
+        ${escapeHtml(url)}
+      </p>
+
+      <div style="
+        display:flex;
+        gap:8px;
+        justify-content:center;
+        flex-wrap:wrap;
+      ">
+
+        <button
+          type="button"
+          id="verifyitQRDownload"
+        >
+          Save QR
+        </button>
+
+        <button
+          type="button"
+          id="verifyitQRClose"
+        >
+          Close
+        </button>
+
+      </div>
+
+    </div>
+  `;
+
+  document.body.appendChild(
+    modal
+  );
+
+  $("verifyitQRClose")
     .addEventListener(
-      "submit",
-      async event => {
-
-        event.preventDefault();
-
-        const codeInput =
-          $("verifyCode");
-
-        const result =
-          $("verificationResult");
-
-        const code =
-          codeInput
-            ?.value
-            ?.trim();
-
-        if (!code) {
-
-          alert(
-            "Please enter a verification code."
-          );
-
-          return;
-        }
-
-        if (result) {
-
-          result.innerHTML =
-            "Checking...";
-        }
-
-        try {
-
-          const data =
-            await api(
-              `/api/verify/${encodeURIComponent(code)}`
-            );
-
-          if (!result) {
-
-            alert(
-              JSON.stringify(
-                data,
-                null,
-                2
-              )
-            );
-
-            return;
-          }
-
-          const product =
-            data.product ||
-            {};
-
-          const success =
-            data.success !== false;
-
-          result.innerHTML = `
-
-            <div class="
-              verification-result
-              ${success
-                ? "verification-success"
-                : "verification-warning"}
-            ">
-
-              <h3>
-                ${
-                  success
-                    ? "Verification Result"
-                    : "Verification Warning"
-                }
-              </h3>
-
-              <p>
-                ${
-                  escapeHtml(
-                    data.message ||
-                    data.result ||
-                    data.error ||
-                    (
-                      success
-                        ? "Product verification completed."
-                        : "Unable to verify this product."
-                    )
-                  )
-                }
-              </p>
-
-              ${
-                product.product_name ||
-                product.productName
-                  ? `
-                    <p>
-                      <strong>Product:</strong>
-                      ${escapeHtml(
-                        product.product_name ||
-                        product.productName
-                      )}
-                    </p>
-                  `
-                  : ""
-              }
-
-              ${
-                product.brand
-                  ? `
-                    <p>
-                      <strong>Brand:</strong>
-                      ${escapeHtml(
-                        product.brand
-                      )}
-                    </p>
-                  `
-                  : ""
-              }
-
-              ${
-                product.batch
-                  ? `
-                    <p>
-                      <strong>Batch:</strong>
-                      ${escapeHtml(
-                        product.batch
-                      )}
-                    </p>
-                  `
-                  : ""
-              }
-
-              ${
-                product.image_data ||
-                product.imageData
-                  ? `
-                    <img
-                      src="${
-                        product.image_data ||
-                        product.imageData
-                      }"
-                      alt="Verified product"
-                      class="verified-product-image"
-                    >
-                  `
-                  : ""
-              }
-
-            </div>
-          `;
-
-        } catch (error) {
-
-          if (result) {
-
-            result.innerHTML = `
-              <div class="verification-error">
-                ${escapeHtml(
-                  error.message
-                )}
-              </div>
-            `;
-
-          } else {
-
-            alert(
-              error.message
-            );
-          }
-        }
-      }
+      "click",
+      removeQRModal
     );
-}
 
-
-/* =========================================================
-   BULK PRODUCTS
-   V1.6 PLACEHOLDER
-========================================================= */
-
-/*
-  The index.html already contains the
-  V1.6 Bulk Products interface.
-
-  However, the V1.5 backend currently
-  has NO bulk endpoint.
-
-  Therefore this button intentionally
-  does NOT pretend to perform a bulk
-  registration.
-
-  Once the V1.6 backend is added, this
-  handler will be replaced with the
-  real CSV/Excel processing workflow.
-*/
-
-if ($("bulkImportButton")) {
-
-  $("bulkImportButton")
+  $("verifyitQRDownload")
     .addEventListener(
       "click",
       () => {
+        const link =
+          document.createElement("a");
 
-        alert(
-          "Bulk Product Import is being prepared for VerifyIt V1.6."
-        );
+        link.href = image;
+        link.download =
+          `verifyit-${code}.png`;
 
+        document.body.appendChild(link);
+
+        link.click();
+
+        link.remove();
       }
+    );
+
+  modal.addEventListener(
+    "click",
+    event => {
+      if (
+        event.target === modal
+      ) {
+        removeQRModal();
+      }
+    }
+  );
+}
+
+function removeQRModal() {
+  const modal =
+    $("verifyitQRModal");
+
+  if (modal) {
+    modal.remove();
+  }
+}
+
+/* =========================================================
+   V1.6 BULK IMPORT
+========================================================= */
+
+function openBulkImport() {
+  createBulkImportModal();
+}
+
+window.openBulkImport =
+  openBulkImport;
+
+/* =========================================================
+   CREATE BULK IMPORT MODAL
+========================================================= */
+
+function createBulkImportModal() {
+  removeBulkImportModal();
+
+  const modal =
+    document.createElement("div");
+
+  modal.id =
+    "verifyitBulkImportModal";
+
+  modal.style.cssText = `
+    position:fixed;
+    inset:0;
+    z-index:99998;
+    background:rgba(0,0,0,.82);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:15px;
+    overflow:auto;
+  `;
+
+  modal.innerHTML = `
+    <div style="
+      background:#fff;
+      color:#111;
+      width:min(760px,100%);
+      max-height:95vh;
+      overflow:auto;
+      border-radius:16px;
+      padding:24px;
+      box-sizing:border-box;
+    ">
+
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+      ">
+
+        <div>
+          <h2 style="margin:0;">
+            BULK PRODUCT IMPORT
+          </h2>
+
+          <p style="margin:6px 0 0;">
+            Import up to 50 products at once.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          id="verifyitBulkClose"
+        >
+          ✕
+        </button>
+
+      </div>
+
+      <hr>
+
+      <div style="
+        background:#f4f4f4;
+        border-radius:10px;
+        padding:15px;
+        margin-bottom:15px;
+      ">
+
+        <strong>
+          Supported columns
+        </strong>
+
+        <p style="
+          margin:8px 0 0;
+          font-size:14px;
+        ">
+          Brand, Product, Batch
+        </p>
+
+        <p style="
+          margin:8px 0 0;
+          font-size:13px;
+        ">
+          Example:
+          <br>
+          <code>
+            Brand A, Product One, BATCH-001
+          </code>
+          <br>
+          <code>
+            Brand A, Product Two, BATCH-002
+          </code>
+        </p>
+
+      </div>
+
+      <div style="
+        border:2px dashed #aaa;
+        border-radius:12px;
+        padding:25px;
+        text-align:center;
+      ">
+
+        <p>
+          Choose a CSV or text file.
+        </p>
+
+        <input
+          id="verifyitBulkFile"
+          type="file"
+          accept=".csv,.txt"
+          style="max-width:100%;"
+        >
+
+      </div>
+
+      <div
+        id="verifyitBulkPreview"
+        style="margin-top:20px;"
+      ></div>
+
+      <div
+        id="verifyitBulkStatus"
+        style="
+          margin-top:15px;
+          font-weight:bold;
+        "
+      ></div>
+
+      <div style="
+        display:flex;
+        gap:10px;
+        justify-content:flex-end;
+        flex-wrap:wrap;
+        margin-top:20px;
+      ">
+
+        <button
+          type="button"
+          id="verifyitBulkCancel"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          id="verifyitBulkImport"
+          disabled
+        >
+          Import Products
+        </button>
+
+      </div>
+
+      <div
+        id="verifyitBulkResults"
+        style="margin-top:20px;"
+      ></div>
+
+    </div>
+  `;
+
+  document.body.appendChild(
+    modal
+  );
+
+  $("verifyitBulkClose")
+    .addEventListener(
+      "click",
+      removeBulkImportModal
+    );
+
+  $("verifyitBulkCancel")
+    .addEventListener(
+      "click",
+      removeBulkImportModal
+    );
+
+  $("verifyitBulkFile")
+    .addEventListener(
+      "change",
+      handleBulkFile
+    );
+
+  $("verifyitBulkImport")
+    .addEventListener(
+      "click",
+      submitBulkProducts
     );
 }
 
+/* =========================================================
+   BULK IMPORT STATE
+========================================================= */
+
+let bulkProducts = [];
 
 /* =========================================================
-   HELPER FUNCTIONS
+   READ BULK FILE
+========================================================= */
+
+function handleBulkFile(event) {
+  const file =
+    event.target.files?.[0];
+
+  bulkProducts = [];
+
+  if (!file) {
+    return;
+  }
+
+  const reader =
+    new FileReader();
+
+  reader.onload = () => {
+    try {
+      const text =
+        String(
+          reader.result || ""
+        );
+
+      bulkProducts =
+        parseCSVProducts(text);
+
+      renderBulkPreview();
+
+    } catch (error) {
+      showBulkStatus(
+        error.message,
+        true
+      );
+    }
+  };
+
+  reader.onerror = () => {
+    showBulkStatus(
+      "Unable to read the selected file.",
+      true
+    );
+  };
+
+  reader.readAsText(file);
+}
+
+/* =========================================================
+   CSV PARSER
+========================================================= */
+
+function parseCSVProducts(text) {
+  const lines =
+    text
+      .replace(/^\uFEFF/, "")
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+  if (!lines.length) {
+    throw new Error(
+      "The selected file is empty."
+    );
+  }
+
+  const rows =
+    lines.map(parseCSVLine);
+
+  /*
+    Detect optional header row.
+  */
+  let startIndex = 0;
+
+  const first =
+    rows[0].map(value =>
+      value.toLowerCase().trim()
+    );
+
+  if (
+    first.some(value =>
+      [
+        "brand",
+        "product",
+        "product name",
+        "productname",
+        "batch"
+      ].includes(value)
+    )
+  ) {
+    startIndex = 1;
+  }
+
+  const products = [];
+
+  for (
+    let i = startIndex;
+    i < rows.length;
+    i++
+  ) {
+    const row = rows[i];
+
+    if (!row.length) {
+      continue;
+    }
+
+    const brand =
+      String(row[0] || "").trim();
+
+    const productName =
+      String(row[1] || "").trim();
+
+    const batch =
+      String(row[2] || "").trim();
+
+    if (
+      !brand &&
+      !productName &&
+      !batch
+    ) {
+      continue;
+    }
+
+    if (!brand) {
+      throw new Error(
+        `Row ${i + 1}: Brand is missing.`
+      );
+    }
+
+    if (!productName) {
+      throw new Error(
+        `Row ${i + 1}: Product name is missing.`
+      );
+    }
+
+    products.push({
+      brand,
+      productName,
+      batch
+    });
+  }
+
+  if (!products.length) {
+    throw new Error(
+      "No valid products were found."
+    );
+  }
+
+  if (products.length > 50) {
+    throw new Error(
+      "Maximum 50 products per import."
+    );
+  }
+
+  return products;
+}
+
+/* =========================================================
+   SIMPLE CSV PARSER
+========================================================= */
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = "";
+  let insideQuotes = false;
+
+  for (
+    let i = 0;
+    i < line.length;
+    i++
+  ) {
+    const char = line[i];
+
+    if (char === '"') {
+
+      if (
+        insideQuotes &&
+        line[i + 1] === '"'
+      ) {
+        current += '"';
+        i++;
+        continue;
+      }
+
+      insideQuotes =
+        !insideQuotes;
+
+      continue;
+    }
+
+    if (
+      char === "," &&
+      !insideQuotes
+    ) {
+      result.push(
+        current.trim()
+      );
+
+      current = "";
+
+      continue;
+    }
+
+    current += char;
+  }
+
+  result.push(
+    current.trim()
+  );
+
+  return result;
+}
+
+/* =========================================================
+   BULK PREVIEW
+========================================================= */
+
+function renderBulkPreview() {
+  const preview =
+    $("verifyitBulkPreview");
+
+  const importButton =
+    $("verifyitBulkImport");
+
+  if (!preview) {
+    return;
+  }
+
+  if (!bulkProducts.length) {
+    preview.innerHTML = "";
+    importButton.disabled = true;
+    return;
+  }
+
+  importButton.disabled = false;
+
+  const visibleProducts =
+    bulkProducts.slice(0, 10);
+
+  preview.innerHTML = `
+    <h3>
+      Import Preview
+    </h3>
+
+    <p>
+      ${bulkProducts.length}
+      product(s) ready.
+    </p>
+
+    <div style="
+      overflow:auto;
+      border:1px solid #ddd;
+      border-radius:8px;
+    ">
+
+      <table style="
+        width:100%;
+        border-collapse:collapse;
+      ">
+
+        <thead>
+          <tr>
+            <th style="padding:8px;text-align:left;">
+              #
+            </th>
+
+            <th style="padding:8px;text-align:left;">
+              Brand
+            </th>
+
+            <th style="padding:8px;text-align:left;">
+              Product
+            </th>
+
+            <th style="padding:8px;text-align:left;">
+              Batch
+            </th>
+          </tr>
+        </thead>
+
+        <tbody>
+
+          ${visibleProducts.map(
+            (product, index) => `
+              <tr>
+
+                <td style="padding:8px;">
+                  ${index + 1}
+                </td>
+
+                <td style="padding:8px;">
+                  ${escapeHtml(product.brand)}
+                </td>
+
+                <td style="padding:8px;">
+                  ${escapeHtml(product.productName)}
+                </td>
+
+                <td style="padding:8px;">
+                  ${escapeHtml(product.batch || "—")}
+                </td>
+
+              </tr>
+            `
+          ).join("")}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    ${
+      bulkProducts.length > 10
+        ? `
+          <p style="font-size:13px;">
+            Showing first 10 of
+            ${bulkProducts.length}
+            products.
+          </p>
+        `
+        : ""
+    }
+  `;
+
+  showBulkStatus(
+    "Ready to import.",
+    false
+  );
+}
+
+/* =========================================================
+   SUBMIT BULK PRODUCTS
+========================================================= */
+
+async function submitBulkProducts() {
+  if (!bulkProducts.length) {
+    return;
+  }
+
+  const button =
+    $("verifyitBulkImport");
+
+  button.disabled = true;
+
+  showBulkStatus(
+    "Registering products and generating QR codes...",
+    false
+  );
+
+  try {
+    const data =
+      await api(
+        "/api/products/bulk",
+        {
+          method: "POST",
+          body: {
+            products: bulkProducts
+          }
+        }
+      );
+
+    showBulkStatus(
+      `Successfully registered ${data.count} product(s).`,
+      false
+    );
+
+    renderBulkResults(
+      data.products || []
+    );
+
+    await loadProducts();
+    await loadStats();
+
+    bulkProducts = [];
+
+  } catch (error) {
+
+    showBulkStatus(
+      error.message,
+      true
+    );
+
+    button.disabled = false;
+  }
+}
+
+/* =========================================================
+   BULK RESULTS
+========================================================= */
+
+function renderBulkResults(products) {
+  const container =
+    $("verifyitBulkResults");
+
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = `
+    <h3>
+      Generated Products
+    </h3>
+
+    <p>
+      Each product now has a unique VerifyIt
+      code and QR verification link.
+    </p>
+
+    <div style="
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    ">
+
+      ${products.map(
+        product => `
+          <div style="
+            border:1px solid #ddd;
+            border-radius:10px;
+            padding:12px;
+          ">
+
+            <strong>
+              ${escapeHtml(product.brand)}
+            </strong>
+
+            <br>
+
+            ${escapeHtml(product.productName)}
+
+            <br><br>
+
+            <code>
+              ${escapeHtml(product.code)}
+            </code>
+
+            <br><br>
+
+            <button
+              type="button"
+              onclick="showBulkQR('${escapeJs(product.code)}','${escapeJs(product.qrData)}','${escapeJs(product.qrUrl)}')"
+            >
+              View QR
+            </button>
+
+            <button
+              type="button"
+              onclick="copyVerificationCode('${escapeJs(product.code)}')"
+            >
+              Copy Code
+            </button>
+
+          </div>
+        `
+      ).join("")}
+
+    </div>
+  `;
+}
+
+/* =========================================================
+   BULK QR
+========================================================= */
+
+function showBulkQR(
+  code,
+  qrData,
+  qrUrl
+) {
+  showQRModal({
+    code,
+    url: qrUrl,
+    image: qrData
+  });
+}
+
+window.showBulkQR =
+  showBulkQR;
+
+/* =========================================================
+   BULK STATUS
+========================================================= */
+
+function showBulkStatus(
+  message,
+  isError
+) {
+  const box =
+    $("verifyitBulkStatus");
+
+  if (!box) {
+    return;
+  }
+
+  box.textContent =
+    message;
+
+  box.style.color =
+    isError
+      ? "#b00020"
+      : "#111";
+}
+
+/* =========================================================
+   REMOVE BULK MODAL
+========================================================= */
+
+function removeBulkImportModal() {
+  const modal =
+    $("verifyitBulkImportModal");
+
+  if (modal) {
+    modal.remove();
+  }
+
+  bulkProducts = [];
+}
+
+window.removeBulkImportModal =
+  removeBulkImportModal;
+
+/* =========================================================
+   CONNECT EXISTING BULK BUTTON
+========================================================= */
+
+function connectBulkButton() {
+  const button =
+    $("bulkImportButton");
+
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener(
+    "click",
+    event => {
+      event.preventDefault();
+      openBulkImport();
+    }
+  );
+}
+
+/* =========================================================
+   QUICK ACTION / ANCHOR SUPPORT
+========================================================= */
+
+function connectBulkLinks() {
+  document
+    .querySelectorAll(
+      'a[href="#bulk-import"]'
+    )
+    .forEach(link => {
+
+      link.addEventListener(
+        "click",
+        event => {
+          event.preventDefault();
+
+          const section =
+            $("bulk-import");
+
+          if (section) {
+            section.scrollIntoView({
+              behavior: "smooth"
+            });
+          }
+
+          openBulkImport();
+        }
+      );
+
+    });
+}
+
+/* =========================================================
+   PUBLIC VERIFICATION
+========================================================= */
+
+async function verifyProduct(
+  code
+) {
+  const cleanCode =
+    String(code || "")
+      .trim()
+      .toUpperCase();
+
+  if (!cleanCode) {
+    return;
+  }
+
+  try {
+    const data =
+      await api(
+        "/api/verify/" +
+        encodeURIComponent(
+          cleanCode
+        )
+      );
+
+    displayVerificationResult(
+      data
+    );
+
+  } catch (error) {
+
+    displayVerificationResult({
+      success: false,
+      result: "not_verified",
+      message:
+        error.message
+    });
+  }
+}
+
+window.verifyProduct =
+  verifyProduct;
+
+/* =========================================================
+   VERIFICATION RESULT
+========================================================= */
+
+function displayVerificationResult(
+  data
+) {
+  const container =
+    $("verificationResult") ||
+    $("verifyResult") ||
+    $("verificationResultArea");
+
+  if (!container) {
+    alert(
+      data.message ||
+      "Verification complete."
+    );
+
+    return;
+  }
+
+  const product =
+    data.product || {};
+
+  const isAuthentic =
+    data.result === "authentic";
+
+  const isWarning =
+    data.result === "warning";
+
+  let title =
+    "Product Not Verified";
+
+  if (isAuthentic) {
+    title =
+      "Product Verified";
+  } else if (isWarning) {
+    title =
+      "Verification Warning";
+  }
+
+  container.hidden = false;
+
+  container.innerHTML = `
+    <div class="verification-result">
+
+      <h2>
+        ${escapeHtml(title)}
+      </h2>
+
+      <p>
+        ${escapeHtml(
+          data.message ||
+          ""
+        )}
+      </p>
+
+      ${
+        product.brand
+          ? `
+            <p>
+              <strong>Brand:</strong>
+              ${escapeHtml(product.brand)}
+            </p>
+          `
+          : ""
+      }
+
+      ${
+        product.productName
+          ? `
+            <p>
+              <strong>Product:</strong>
+              ${escapeHtml(product.productName)}
+            </p>
+          `
+          : ""
+      }
+
+      ${
+        product.batch
+          ? `
+            <p>
+              <strong>Batch:</strong>
+              ${escapeHtml(product.batch)}
+            </p>
+          `
+          : ""
+      }
+
+      ${
+        product.code
+          ? `
+            <p>
+              <strong>Code:</strong>
+              <code>
+                ${escapeHtml(product.code)}
+              </code>
+            </p>
+          `
+          : ""
+      }
+
+      ${
+        product.imageData
+          ? `
+            <img
+              src="${product.imageData}"
+              alt="Verified product"
+              style="
+                max-width:240px;
+                width:100%;
+                border-radius:12px;
+              "
+            >
+          `
+          : ""
+      }
+
+    </div>
+  `;
+
+  container.scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
+}
+
+/* =========================================================
+   PUBLIC VERIFICATION FORM
+========================================================= */
+
+function connectVerificationForm() {
+  const form =
+    $("verifyForm");
+
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener(
+    "submit",
+    async event => {
+      event.preventDefault();
+
+      const input =
+        $("verifyCode") ||
+        $("verificationCode") ||
+        $("codeInput");
+
+      if (!input) {
+        return;
+      }
+
+      await verifyProduct(
+        input.value
+      );
+    }
+  );
+}
+
+/* =========================================================
+   AUTO VERIFY FROM QR LINK
+========================================================= */
+
+function autoVerifyFromUrl() {
+  const params =
+    new URLSearchParams(
+      window.location.search
+    );
+
+  const verifyCode =
+    params.get("verify");
+
+  if (!verifyCode) {
+    return;
+  }
+
+  const input =
+    $("verifyCode") ||
+    $("verificationCode") ||
+    $("codeInput");
+
+  if (input) {
+    input.value =
+      verifyCode;
+  }
+
+  /*
+    Give the page a moment to finish rendering.
+  */
+  setTimeout(() => {
+    verifyProduct(
+      verifyCode
+    );
+  }, 300);
+}
+
+/* =========================================================
+   HTML SAFETY HELPERS
 ========================================================= */
 
 function escapeHtml(value) {
-
   return String(
     value ?? ""
   )
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
-
 
 function escapeJs(value) {
-
   return String(
     value ?? ""
   )
-    .replace(
-      /\\/g,
-      "\\\\"
-    )
-    .replace(
-      /'/g,
-      "\\'"
-    )
-    .replace(
-      /"/g,
-      '\\"'
-    )
-    .replace(
-      /\n/g,
-      "\\n"
-    )
-    .replace(
-      /\r/g,
-      "\\r"
-    );
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'")
+    .replaceAll("\n", "\\n")
+    .replaceAll("\r", "\\r");
 }
 
-
 /* =========================================================
-   INITIALIZATION
+   STARTUP
 ========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   () => {
 
+    connectBulkButton();
+
+    connectBulkLinks();
+
+    connectVerificationForm();
+
     loadCurrentUser();
+
+    autoVerifyFromUrl();
 
   }
 );
