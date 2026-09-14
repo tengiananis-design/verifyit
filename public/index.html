@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
 
   <meta
     name="description"
@@ -11,7 +15,57 @@
 
   <title>VerifyIt — Product Verification</title>
 
-  <link rel="stylesheet" href="/style.css?v=9">
+  <link rel="stylesheet" href="/style.css?v=10">
+
+  <style>
+    .business-login-link {
+      background:#101828;
+      color:#fff !important;
+      padding:9px 14px;
+      border-radius:9px;
+    }
+
+    .business-login-link:hover {
+      opacity:.9;
+    }
+
+    .dashboard-link {
+      display:none;
+    }
+
+    .dashboard-link.show {
+      display:inline-block;
+    }
+
+    .login-highlight {
+      border:1px solid #d0d5dd;
+      box-shadow:0 12px 35px rgba(16,24,40,.06);
+    }
+
+    .qr-preview {
+      max-width:180px;
+      border-radius:12px;
+      border:1px solid #e5e7eb;
+      padding:8px;
+      background:#fff;
+    }
+
+    .bulk-note {
+      margin-top:15px;
+      padding:14px;
+      border-radius:11px;
+      background:#f7f8fa;
+      color:#69707c;
+      font-size:13px;
+      line-height:1.5;
+    }
+
+    @media(max-width:520px) {
+      .business-login-link {
+        padding:7px 9px;
+      }
+    }
+  </style>
 </head>
 
 <body>
@@ -28,19 +82,37 @@
     </a>
 
     <nav>
-      <a href="#verify">Verify</a>
-      <a href="#business">For Businesses</a>
-      <a href="#features">Features</a>
+
+      <a href="#verify">
+        Verify
+      </a>
+
+      <a href="#features">
+        Features
+      </a>
+
+      <a
+        href="#business-login"
+        class="business-login-link"
+      >
+        Business Login
+      </a>
+
     </nav>
 
   </header>
 
 
   <!-- =====================================================
-       HERO
+       MAIN
        ===================================================== -->
 
   <main>
+
+
+    <!-- ===================================================
+         HERO
+         =================================================== -->
 
     <section class="hero">
 
@@ -70,7 +142,7 @@
           </a>
 
           <a
-            href="#business"
+            href="#business-login"
             class="text-link"
           >
             For Businesses →
@@ -86,8 +158,6 @@
 
       </div>
 
-
-      <!-- HERO CARD -->
 
       <div class="card hero-card">
 
@@ -122,7 +192,7 @@
 
 
     <!-- ===================================================
-         VERIFY PRODUCT
+         PUBLIC VERIFICATION
          =================================================== -->
 
     <section
@@ -210,6 +280,7 @@
 
       <div class="feature-grid">
 
+
         <div class="feature-card">
 
           <b>01</b>
@@ -273,6 +344,7 @@
 
         </div>
 
+
       </div>
 
     </section>
@@ -289,7 +361,11 @@
 
       <div id="authArea">
 
-        <div class="section-heading">
+
+        <div
+          id="business-login"
+          class="section-heading"
+        >
 
           <div class="eyebrow">
             VERIFYIT FOR BUSINESS
@@ -300,8 +376,8 @@
           </h2>
 
           <p>
-            Create a VerifyIt business account and start
-            registering your products.
+            Login to your business account or create one
+            to start registering your products.
           </p>
 
         </div>
@@ -309,70 +385,25 @@
 
         <div class="auth-grid">
 
-          <!-- REGISTER -->
 
-          <div class="card form-card">
+          <!-- =============================================
+               LOGIN
+               ============================================= -->
+
+          <div class="card form-card login-highlight">
+
+            <div class="eyebrow">
+              EXISTING PARTNER
+            </div>
 
             <h3>
-              Create an account
+              Business Login
             </h3>
 
             <p class="muted">
-              Start building your verified product catalog.
+              Access your VerifyIt business dashboard.
             </p>
 
-            <form id="registerForm">
-
-              <input
-                type="text"
-                id="registerName"
-                name="registerName"
-                placeholder="Business name"
-                autocomplete="organization"
-                required
-              >
-
-              <input
-                type="email"
-                id="registerEmail"
-                name="registerEmail"
-                placeholder="Email address"
-                autocomplete="email"
-                required
-              >
-
-              <input
-                type="password"
-                id="registerPassword"
-                name="registerPassword"
-                placeholder="Password"
-                autocomplete="new-password"
-                required
-              >
-
-              <button
-                type="submit"
-                class="button"
-              >
-                Create Account
-              </button>
-
-            </form>
-
-          </div>
-
-
-          <!-- LOGIN -->
-
-          <div class="card form-card">
-
-            <h3>
-              Business login
-            </h3>
-
-            <p class="muted">
-              Already registered? Access your dashboard.
-            </p>
 
             <form id="loginForm">
 
@@ -405,6 +436,67 @@
 
           </div>
 
+
+          <!-- =============================================
+               REGISTER
+               ============================================= -->
+
+          <div class="card form-card">
+
+            <div class="eyebrow">
+              NEW PARTNER
+            </div>
+
+            <h3>
+              Create an account
+            </h3>
+
+            <p class="muted">
+              Start building your verified product catalog.
+            </p>
+
+
+            <form id="registerForm">
+
+              <input
+                type="text"
+                id="registerName"
+                name="registerName"
+                placeholder="Business name"
+                autocomplete="organization"
+                required
+              >
+
+              <input
+                type="email"
+                id="registerEmail"
+                name="registerEmail"
+                placeholder="Email address"
+                autocomplete="email"
+                required
+              >
+
+              <input
+                type="password"
+                id="registerPassword"
+                name="registerPassword"
+                placeholder="Create password"
+                autocomplete="new-password"
+                required
+              >
+
+              <button
+                type="submit"
+                class="button"
+              >
+                Create Account
+              </button>
+
+            </form>
+
+          </div>
+
+
         </div>
 
       </div>
@@ -418,6 +510,9 @@
         id="dashboard"
         class="hidden"
       >
+
+
+        <!-- DASHBOARD HEADER -->
 
         <div class="dash-head">
 
@@ -450,35 +545,59 @@
         </div>
 
 
-        <!-- =================================================
-             STATS
-             ================================================= -->
+        <!-- ===============================================
+             DASHBOARD STATS
+             =============================================== -->
 
         <div class="stats">
 
           <div>
-            <b id="productCount">0</b>
-            <span>Products</span>
+
+            <b id="productCount">
+              0
+            </b>
+
+            <span>
+              Products
+            </span>
+
           </div>
 
-          <div>
-            <b id="checkCount">0</b>
-            <span>Total Checks</span>
-          </div>
 
           <div>
-            <b id="warningCount">0</b>
-            <span>Warnings</span>
+
+            <b id="checkCount">
+              0
+            </b>
+
+            <span>
+              Total Checks
+            </span>
+
+          </div>
+
+
+          <div>
+
+            <b id="warningCount">
+              0
+            </b>
+
+            <span>
+              Warnings
+            </span>
+
           </div>
 
         </div>
 
 
-        <!-- =================================================
-             DASHBOARD QUICK ACTIONS
-             ================================================= -->
+        <!-- ===============================================
+             DASHBOARD ACTIONS
+             =============================================== -->
 
         <div class="feature-grid">
+
 
           <a
             href="#register-product"
@@ -550,17 +669,18 @@
             </h3>
 
             <p>
-              More brand and verification tools coming.
+              Brand and verification tools.
             </p>
 
           </a>
 
+
         </div>
 
 
-        <!-- =================================================
+        <!-- ===============================================
              REGISTER PRODUCT
-             ================================================= -->
+             =============================================== -->
 
         <div
           id="register-product"
@@ -579,7 +699,8 @@
             </h2>
 
             <p>
-              Create a unique VerifyIt identity for a product.
+              Create a unique VerifyIt identity for your
+              product.
             </p>
 
           </div>
@@ -632,9 +753,9 @@
         </div>
 
 
-        <!-- =================================================
+        <!-- ===============================================
              BULK IMPORT
-             ================================================= -->
+             =============================================== -->
 
         <div
           id="bulk-import"
@@ -663,6 +784,7 @@
 
 
           <div class="feature-grid">
+
 
             <div class="feature-card">
 
@@ -727,6 +849,23 @@
 
             </div>
 
+
+          </div>
+
+
+          <div class="bulk-note">
+
+            <strong>
+              Bulk import workflow
+            </strong>
+
+            <br>
+
+            Upload your CSV, review the products, then
+            register them together. VerifyIt will create
+            unique verification codes and QR codes for
+            every product.
+
           </div>
 
 
@@ -745,9 +884,9 @@
         </div>
 
 
-        <!-- =================================================
+        <!-- ===============================================
              PRODUCT CATALOG
-             ================================================= -->
+             =============================================== -->
 
         <div
           id="product-catalog"
@@ -799,9 +938,9 @@
         </div>
 
 
-        <!-- =================================================
+        <!-- ===============================================
              PARTNER TOOLS
-             ================================================= -->
+             =============================================== -->
 
         <div
           id="partner-tools"
@@ -820,14 +959,16 @@
             </h2>
 
             <p>
-              VerifyIt's partner platform will continue to
-              expand with tools designed around product trust.
+              VerifyIt's partner platform will continue
+              expanding with tools designed around
+              product trust.
             </p>
 
           </div>
 
 
           <div class="feature-grid">
+
 
             <div class="feature-card">
 
@@ -892,6 +1033,7 @@
 
             </div>
 
+
           </div>
 
         </div>
@@ -903,7 +1045,7 @@
 
 
     <!-- ===================================================
-         FINAL CTA
+         FINAL SECTION
          =================================================== -->
 
     <section class="section final-note">
@@ -923,6 +1065,7 @@
 
     </section>
 
+
   </main>
 
 
@@ -933,6 +1076,7 @@
   <footer>
 
     VerifyIt V1.6 Partner Ready
+
     <br>
 
     Product verification infrastructure for brands.
@@ -941,10 +1085,10 @@
 
 
   <!-- =====================================================
-       APP
+       APPLICATION
        ===================================================== -->
 
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=10"></script>
 
 </body>
 </html>
